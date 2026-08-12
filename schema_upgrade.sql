@@ -1,4 +1,4 @@
--- 商業簡介網站：8 項功能資料庫升級
+-- 商業簡介網站：資料庫升級（可重複執行版）
 -- 請在 Supabase SQL Editor 執行一次。
 
 create extension if not exists pgcrypto;
@@ -15,13 +15,12 @@ create table if not exists public.site_settings (
 );
 insert into public.site_settings(id) values(1) on conflict(id) do nothing;
 
--- 使用者角色：目前已存在的 Auth 使用者預設視為管理員；之後由 Edge Function 建立的訪客會是 visitor。
+-- 使用者角色
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   role text not null default 'visitor' check (role in ('admin','visitor')),
   created_at timestamptz not null default now()
 );
-insert into public.profiles(id,role) select id,'admin' from auth.users on conflict(id) do nothing;
 
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path=public
@@ -49,6 +48,17 @@ create table if not exists public.products (
 create table if not exists public.visitor_accounts (
   id uuid primary key references auth.users(id) on delete cascade, email text not null unique, active boolean not null default true, created_at timestamptz not null default now()
 );
+
+-- 建立角色資料：
+-- 已存在於 visitor_accounts 的使用者一定是 visitor；其他既有 Auth 使用者才預設為 admin。
+insert into public.profiles(id, role)
+select u.id, case when va.id is not null then 'visitor' else 'admin' end
+from auth.users u
+left join public.visitor_accounts va on va.id = u.id
+on conflict (id) do update set role =
+  case when exists (
+    select 1 from public.visitor_accounts va2 where va2.id = public.profiles.id
+  ) then 'visitor' else public.profiles.role end;
 
 -- 客服
 create table if not exists public.support_tickets (
@@ -90,6 +100,7 @@ create policy profile_admin_all on public.profiles for all to authenticated usin
 drop policy if exists ticket_owner_insert on public.support_tickets;
 drop policy if exists ticket_owner_read on public.support_tickets;
 drop policy if exists ticket_admin_all on public.support_tickets;
+drop policy if exists ticket_admin_delete on public.support_tickets;
 create policy ticket_owner_insert on public.support_tickets for insert to authenticated with check(user_id=auth.uid());
 create policy ticket_owner_read on public.support_tickets for select to authenticated using(user_id=auth.uid() or public.is_admin());
 create policy ticket_admin_all on public.support_tickets for update to authenticated using(public.is_admin()) with check(public.is_admin());
