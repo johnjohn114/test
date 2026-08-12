@@ -1,7 +1,7 @@
 -- 商業簡介網站：資料庫升級（可重複執行版）
 -- 請在 Supabase SQL Editor 執行一次。
 
-create extension if not exists pgcrypto;
+cㄊreate extension if not exists pgcrypto;
 
 -- 既有網站設定
 create table if not exists public.site_settings (
