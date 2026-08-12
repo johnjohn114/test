@@ -101,3 +101,33 @@ update public.announcements set published_at=(date::timestamptz) where published
 
 -- 如果你的舊管理員不是唯一的 Auth 使用者，請在 SQL Editor 手動把真正管理員設為 admin，例如：
 -- update public.profiles p set role='admin' from auth.users u where p.id=u.id and u.email='你的管理員Email';
+
+
+-- 優惠券：每張優惠券綁定一位訪客，因此不同訪客的優惠券完全分開。
+create table if not exists public.coupons (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.visitor_accounts(id) on delete cascade,
+  title text not null,
+  description text,
+  code text not null,
+  discount text,
+  expires_at timestamptz,
+  used boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+alter table public.coupons enable row level security;
+
+drop policy if exists coupon_owner_read on public.coupons;
+drop policy if exists coupon_admin_all on public.coupons;
+create policy coupon_owner_read on public.coupons
+  for select to authenticated
+  using (user_id=auth.uid() or public.is_admin());
+
+create policy coupon_admin_all on public.coupons
+  for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+create index if not exists coupons_user_id_idx on public.coupons(user_id);
+create index if not exists coupons_expires_at_idx on public.coupons(expires_at);

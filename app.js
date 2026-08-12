@@ -14,4 +14,26 @@ async function loadProducts(){if(!configured())return;const h={apikey:SUPABASE_A
 function productCard(p){return '<article class="productCard">'+(p.image_url?'<img src="'+esc(p.image_url)+'" alt="'+esc(p.name)+'">':'<div class="productImage">📦</div>')+'<div class="productBody"><div class="date">'+esc(p.category||'商品')+'</div><h3>'+esc(p.name)+'</h3><p>'+esc(p.description||'')+'</p><strong>NT$ '+Number(p.price||0).toLocaleString()+'</strong></div></article>'}
 async function sendTicket(){if(!visitorToken()){show('ticketMsg','請先登入訪客帳號。');return}const subject=$('ticketSubject').value.trim(),message=$('ticketMessage').value.trim();if(!subject||!message){show('ticketMsg','請填寫主旨與內容。');return}const r=await fetch(SUPABASE_URL+'/rest/v1/support_tickets',{method:'POST',headers:auth(),body:JSON.stringify({subject,message})});show('ticketMsg',r.ok?'✅ 已送出，管理員會處理。':'❌ 送出失敗，請稍後再試。');if(r.ok){$('ticketSubject').value='';$('ticketMessage').value='';await loadMyTickets()}}
 async function loadMyTickets(){if(!$('myTickets')||!visitorToken())return;const r=await fetch(SUPABASE_URL+'/rest/v1/support_tickets?select=*&order=created_at.desc',{headers:auth()});const rows=r.ok?await r.json():[];$('myTickets').innerHTML=rows.length?rows.map(t=>'<article class="notice"><div class="date">'+esc(t.status)+' · '+esc(String(t.created_at).slice(0,10))+'</div><h3>'+esc(t.subject)+'</h3><p>'+esc(t.message).replace(/\n/g,'<br>')+'</p>'+(t.admin_reply?'<hr><p><b>管理員回覆：</b>'+esc(t.admin_reply).replace(/\n/g,'<br>')+'</p>':'')+'</article>').join(''):'<div class="empty">尚無客服紀錄。</div>'}
-window.addEventListener('DOMContentLoaded',()=>{if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();});
+
+function couponStatus(c){
+  if(c.used) return {text:'⚫ 已使用',cls:'used'};
+  if(c.expires_at && new Date(c.expires_at)<new Date()) return {text:'⚪ 已過期',cls:'expired'};
+  const soon=c.expires_at && (new Date(c.expires_at)-new Date()<7*86400000);
+  return {text:soon?'🟡 即將到期':'🟢 可使用',cls:soon?'soon':'available'};
+}
+function couponCard(c){
+  const s=couponStatus(c);
+  return '<article class="couponCard '+s.cls+'"><div class="couponTop"><span>'+esc(s.text)+'</span><span>🎟️</span></div><h3>'+esc(c.title)+'</h3><p>'+esc(c.description||'')+'</p>'+(c.discount?'<strong class="couponDiscount">'+esc(c.discount)+'</strong>':'')+'<div class="couponCode">'+esc(c.code)+'</div><div class="date">'+(c.expires_at?'有效至：'+esc(String(c.expires_at).slice(0,10)):'無期限')+'</div></article>';
+}
+async function loadMyCoupons(){
+  const box=$('myCoupons'), gate=$('couponGate');
+  if(!box) return;
+  if(!visitorToken()){
+    box.classList.add('hidden'); gate?.classList.remove('hidden'); return;
+  }
+  gate?.classList.add('hidden'); box.classList.remove('hidden');
+  const r=await fetch(SUPABASE_URL+'/rest/v1/coupons?select=*&order=created_at.desc',{headers:auth()});
+  const rows=r.ok?await r.json():[];
+  box.innerHTML=rows.length?rows.map(couponCard).join(''):'<div class="empty">目前沒有優惠券。</div>';
+}
+window.addEventListener('DOMContentLoaded',()=>{if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();});

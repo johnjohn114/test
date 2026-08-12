@@ -9,19 +9,21 @@
 4. 商品頁面＋後台新增／編輯／上架／下架／刪除商品。
 5. 公告支援置頂與預定發布時間。
 6. 公告分類：最新消息／活動／蛋仔／Minecraft伺服器更新。
-7. 管理員可替訪客重設密碼，訪客沒有自行重設入口。
+7. 訪客改回「每個訪客共用同一組統一密碼」，但每位訪客仍有自己的 Email／Auth 使用者 ID。
 8. 客服：訪客送出訊息，後台可查看並回覆。
+9. 我的優惠券：每張優惠券綁定指定訪客，訪客只能看到自己的優惠券；後台可發給單一訪客或全部訪客。
 
 【第一次設定】
 1. 把你原本可用的 config.js 放回本資料夾，覆蓋目前範例檔。
 2. 在 Supabase SQL Editor 執行 schema_upgrade.sql。
-3. 執行 Edge Functions：
+3. 部署 Edge Functions：
    supabase functions deploy create-visitor
-   supabase functions deploy reset-visitor-password
-4. 兩個 Edge Function 都需要 Supabase 自動提供的 SUPABASE_URL、SUPABASE_ANON_KEY、SUPABASE_SERVICE_ROLE_KEY 環境變數。
-5. schema_upgrade.sql 會把當下已存在的 Auth 使用者建立成 admin。若有多個既有使用者，請手動把真正管理員設成 admin，例如：
+   supabase functions deploy set-visitor-password
+   （reset-visitor-password 可保留，但新版前台不使用它。）
+5. Edge Function 需要 Supabase 自動提供的 SUPABASE_URL、SUPABASE_ANON_KEY、SUPABASE_SERVICE_ROLE_KEY。
+6. schema_upgrade.sql 會把當下已存在的 Auth 使用者建立成 admin。若有多個既有使用者，請手動把真正管理員設成 admin，例如：
    update public.profiles p set role='admin' from auth.users u where p.id=u.id and u.email='你的管理員Email';
-6. 新建立的訪客會由 Edge Function 建立為 visitor。
+7. 新建立的訪客會由 Edge Function 建立為 visitor。
 
 【重要安全提醒】
 - 不要把 service_role key 放進 config.js 或任何前端 JS。
@@ -52,3 +54,9 @@ Access-Control-Allow-Headers: authorization, x-client-info, apikey, content-type
 
 注意：如果你是直接在 Supabase Dashboard 編輯 Edge Function，
 請把本 ZIP 裡對應的 index.ts 完整貼入並重新 Deploy。
+
+【統一訪客密碼】
+後台「訪客帳號」輸入一組統一密碼後建立新訪客；若要把既有訪客全部改成新的統一密碼，輸入新密碼後按「將此密碼套用到所有訪客」。
+
+【優惠券】
+執行 schema_upgrade.sql 後會建立 coupons。後台「優惠券」可發給單一訪客或全部訪客；前台「我的優惠券」只查詢目前登入訪客自己的資料。
