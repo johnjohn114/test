@@ -47,8 +47,17 @@ async function setSharedVisitorPassword(){
   const password=$('sharedVisitorPassword').value;
   if(password.length<8){msg('sharedPasswordMsg','統一密碼至少 8 碼。');return}
   try{
-    const d=await callEdge('set-visitor-password',{password});
-    msg('sharedPasswordMsg','✅ 已將統一密碼套用到 '+(d.count||0)+' 位訪客。');
+    msg('sharedPasswordMsg','正在更新所有訪客密碼…');
+    const vr=await fetch(SUPABASE_URL+'/rest/v1/visitor_accounts?select=email&active=eq.true',{headers:auth()});
+    const visitors=vr.ok?await vr.json():[];
+    if(!vr.ok)throw new Error('無法取得訪客清單 HTTP '+vr.status);
+    if(!visitors.length){msg('sharedPasswordMsg','目前沒有啟用中的訪客。');return}
+    let count=0;
+    for(const v of visitors){
+      await callEdge('reset-visitor-password',{email:v.email,password});
+      count++;
+    }
+    msg('sharedPasswordMsg','✅ 已將統一密碼套用到 '+count+' 位訪客。');
   }catch(e){msg('sharedPasswordMsg','❌ '+e.message)}
 }
 async function coupons(){

@@ -18,8 +18,8 @@
 2. 在 Supabase SQL Editor 執行 schema_upgrade.sql。
 3. 部署 Edge Functions：
    supabase functions deploy create-visitor
-   supabase functions deploy set-visitor-password
-   （reset-visitor-password 可保留，但新版前台不使用它。）
+   supabase functions deploy reset-visitor-password
+   
 5. Edge Function 需要 Supabase 自動提供的 SUPABASE_URL、SUPABASE_ANON_KEY、SUPABASE_SERVICE_ROLE_KEY。
 6. schema_upgrade.sql 會把當下已存在的 Auth 使用者建立成 admin。若有多個既有使用者，請手動把真正管理員設成 admin，例如：
    update public.profiles p set role='admin' from auth.users u where p.id=u.id and u.email='你的管理員Email';
