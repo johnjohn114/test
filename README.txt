@@ -35,3 +35,20 @@ python -m http.server 8000
 然後開 http://127.0.0.1:8000/index.html
 
 沒有你的實際 Supabase URL/Key 與資料庫環境時，我可以測試前端檔案、JS 語法、頁面載入與結構，但不能假裝已測試你的真實登入、RLS、Edge Function 和資料庫。
+
+
+【本次修正版：訪客帳號 CORS】
+如果建立訪客時出現「Failed to fetch」或 create-visitor 的 CORS 錯誤，
+請務必把這兩個 Function 重新部署，不能只更新前端 ZIP：
+
+supabase functions deploy create-visitor
+supabase functions deploy reset-visitor-password
+
+新版 Function 已處理 OPTIONS 預檢請求，並加入：
+Access-Control-Allow-Methods: POST, OPTIONS
+Access-Control-Allow-Headers: authorization, x-client-info, apikey, content-type
+
+部署完成後重新整理 GitHub Pages，再測試「後台 → 訪客帳號 → 建立訪客」。
+
+注意：如果你是直接在 Supabase Dashboard 編輯 Edge Function，
+請把本 ZIP 裡對應的 index.ts 完整貼入並重新 Deploy。
