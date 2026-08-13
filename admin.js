@@ -109,11 +109,3 @@ async function visitors() {
   $('adminVisitors').innerHTML = a.map(v => `<div class="visitorRow" style="padding:12px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;"><div><strong>${esc(v.name || v.username || v.email || '未命名訪客')}</strong> <small style="color:#999; margin-left:8px;">(${esc(v.id)})</small></div><button data-vdel="${v.id}" style="background:#ff4d4f; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">🗑️ 刪除</button></div>`).join('') || '<div class="empty">目前沒有訪客資料。</div>';
   document.querySelectorAll('[data-vdel]').forEach(b => b.onclick = () => deleteVisitor(b.dataset.vdel));
 }
-
-async function deleteVisitor(id) {
-  if (!confirm('確定要刪除這位訪客帳號嗎？此動作無法復原。')) return;
-  const r = await fetch(SUPABASE_URL + '/rest/v1/visitor_accounts?id=eq.' + encodeURIComponent(id), { method: 'DELETE', headers: auth() });
-  if (!r.ok) { let d = await r.json().catch(() => ({})); alert('刪除失敗：' + (d.message || d.hint || ('HTTP ' + r.status))); return; }
-  alert('訪客帳號已成功刪除！');
-  await visitors();
-}
