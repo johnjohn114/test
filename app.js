@@ -37,11 +37,14 @@ async function loadMyCoupons(){
   box.innerHTML=rows.length?rows.map(couponCard).join(''):'<div class="empty">目前沒有優惠券。</div>';
 }
 
+// 公開的歷屆成績查詢不使用訪客 JWT。
+// 訪客 token 可能已過期；使用過期 token 會讓 Supabase REST API 回傳 401 JWT expired。
+// competitions / competition_results 的前台查詢只應使用專案 anon key，並由 RLS
+// 控制「只允許讀取已公布資料」。
 function competitionHeaders(){
-  const token=visitorToken();
   return {
     apikey: SUPABASE_ANON_KEY,
-    Authorization: 'Bearer '+(token||SUPABASE_ANON_KEY),
+    Authorization: 'Bearer '+SUPABASE_ANON_KEY,
     'Content-Type':'application/json'
   };
 }
@@ -175,10 +178,14 @@ async function loadCompetitionPage(){
     box.innerHTML=all.join('');
   }catch(e){
     console.error('載入達人榜失敗:',e);
+    const msg=e.message||String(e);
     box.innerHTML=
       '<div class="empty">'+
       '❌ 歷屆成績載入失敗。<br>'+
-      '<small>'+esc(e.message||String(e))+'</small>'+
+      '<small>'+esc(msg)+'</small>'+
+      (String(msg).includes('401')||String(msg).includes('JWT')
+        ? '<br><small>請確認 Supabase 的 competitions／competition_results 已允許公開讀取已公布資料。</small>'
+        : '')+
       '</div>';
   }
 }
