@@ -1,0 +1,17 @@
+達人榜前台最終修正版
+
+本版本只修正前台達人榜讀取與歷屆成績選單。
+
+修正：
+1. 前台查詢已公布 competitions 時，會使用目前訪客登入 token（若存在），避免 RLS 對 anon 查詢造成問題。
+2. published_at 為 NULL 或已到公布時間都可顯示。
+3. 歷屆成績選單會依 Minecraft / 蛋仔列出已公布比賽。
+4. 比賽頁會讀取 competition_results。
+5. 查詢失敗時會在頁面顯示實際 HTTP 錯誤，方便排查。
+6. index.html 與 competitions.html 使用 app.js 的 cache-busting 版本參數，避免 GitHub Pages 快取舊 JS。
+
+重要：
+- 不要替換你原本網站的 config.js。
+- 請把本 ZIP 的前台 app.js、index.html、competitions.html 放到你目前網站。
+- 不需要重新執行 SQL。
+- 不需要重新部署 Edge Function。

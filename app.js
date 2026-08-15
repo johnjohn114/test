@@ -37,47 +37,150 @@ async function loadMyCoupons(){
   box.innerHTML=rows.length?rows.map(couponCard).join(''):'<div class="empty">目前沒有優惠券。</div>';
 }
 
+function competitionHeaders(){
+  const token=visitorToken();
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: 'Bearer '+(token||SUPABASE_ANON_KEY),
+    'Content-Type':'application/json'
+  };
+}
+
+async function supabaseGet(path){
+  const r=await fetch(SUPABASE_URL+path,{headers:competitionHeaders()});
+  const text=await r.text();
+  let data=[];
+  try{data=text?JSON.parse(text):[];}catch(e){data=[];}
+  if(!r.ok){
+    const detail=(data&&data.message)||(data&&data.error_description)||(data&&data.error)||text||('HTTP '+r.status);
+    throw new Error('HTTP '+r.status+': '+detail);
+  }
+  return data;
+}
+
 async function loadCompetitionMenu(){
   const menu=$('competitionMenu');
   if(!menu||!configured())return;
-  const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY};
-  const r=await fetch(SUPABASE_URL+'/rest/v1/competitions?select=id,name,category&published=eq.true&order=event_date.desc,created_at.desc',{headers:h});
-  const rows=r.ok?await r.json():[];
-  const groups={Minecraft:[],蛋仔:[]};
-  rows.forEach(x=>{if(groups[x.category])groups[x.category].push(x)});
-  const links=cat=>groups[cat].length?groups[cat].map(x=>'<a href="competitions.html?id='+encodeURIComponent(x.id)+'">'+esc(x.name)+'</a>').join(''):'<span class="dropdownEmpty">目前沒有公布比賽</span>';
-  menu.innerHTML='<a href="competitions.html">📚 全部歷屆成績</a><div class="dropdownGroup"><b>🎮 Minecraft</b>'+links('Minecraft')+'</div><div class="dropdownGroup"><b>🥚 蛋仔</b>'+links('蛋仔')+'</div>';
+
+  try{
+    const rows=await supabaseGet(
+      '/rest/v1/competitions?select=id,name,category,event_date&published=eq.true&or=(published_at.is.null,published_at.lte.'+
+      encodeURIComponent(new Date().toISOString())+
+      ')&order=event_date.desc,created_at.desc'
+    );
+
+    const groups={Minecraft:[],蛋仔:[]};
+    (Array.isArray(rows)?rows:[]).forEach(x=>{
+      if(groups[x.category])groups[x.category].push(x);
+    });
+
+    const links=cat=>{
+      if(!groups[cat].length)return '<span class="dropdownEmpty">目前沒有公布比賽</span>';
+      return groups[cat].map(x=>
+        '<a href="competitions.html?id='+encodeURIComponent(x.id)+'">'+
+        esc(x.name)+'</a>'
+      ).join('');
+    };
+
+    menu.innerHTML=
+      '<a href="competitions.html">📚 全部歷屆成績</a>'+
+      '<div class="dropdownGroup"><b>🎮 Minecraft</b>'+
+      links('Minecraft')+'</div>'+
+      '<div class="dropdownGroup"><b>🥚 蛋仔</b>'+
+      links('蛋仔')+'</div>';
+  }catch(e){
+    console.error('歷屆成績選單載入失敗:',e);
+    menu.innerHTML=
+      '<a href="competitions.html">📚 全部歷屆成績</a>'+
+      '<div class="dropdownGroup"><b>🎮 Minecraft</b>'+
+      '<a href="competitions.html?category=Minecraft">查看 Minecraft 成績</a></div>'+
+      '<div class="dropdownGroup"><b>🥚 蛋仔</b>'+
+      '<a href="competitions.html?category=%E8%9B%8B%E4%BB%94">查看蛋仔成績</a></div>';
+  }
 }
+
 function competitionResultCard(r){
   const medal=r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':'';
-  return '<article class="notice competitionResult"><div class="date">'+medal+' 第 '+esc(r.place)+' 名</div><h3>'+esc(r.player_name)+'</h3>'+(r.score!==null&&r.score!==undefined&&r.score!==''?'<p><b>分數：</b>'+esc(r.score)+'</p>':'')+(r.prize?'<p><b>獎項：</b>'+esc(r.prize)+'</p>':'')+'</article>';
+  return '<article class="notice competitionResult">'+
+    '<div class="date">'+medal+' 第 '+esc(r.place)+' 名</div>'+
+    '<h3>'+esc(r.player_name)+'</h3>'+
+    (r.score!==null&&r.score!==undefined&&r.score!==''?
+      '<p><b>分數：</b>'+esc(r.score)+'</p>':'')+
+    (r.prize?'<p><b>獎項：</b>'+esc(r.prize)+'</p>':'')+
+    '</article>';
 }
+
 async function loadCompetitionPage(){
   const box=$('competitionList');
-  if(!box||!configured())return;
-  const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY};
+  if(!box)return;
+
+  if(!configured()){
+    box.innerHTML='<div class="empty">網站尚未設定 Supabase。</div>';
+    return;
+  }
+
+  box.innerHTML='<div class="loading">正在載入已公布的比賽…</div>';
+
   const params=new URLSearchParams(location.search);
   const id=params.get('id');
   const category=params.get('category');
-  let url=SUPABASE_URL+'/rest/v1/competitions?select=*&published=eq.true&order=event_date.desc,created_at.desc';
-  if(id)url+='&id=eq.'+encodeURIComponent(id);
-  else if(category&&(category==='Minecraft'||category==='蛋仔'))url+='&category=eq.'+encodeURIComponent(category);
-  const r=await fetch(url,{headers:h});
-  if(!r.ok){
-    const detail=await r.text().catch(()=> '');
-    console.error('載入達人榜失敗:',r.status,detail);
-    box.innerHTML='<div class="empty">目前無法載入比賽成績（'+esc(r.status)+'）。</div>';
-    return;
+
+  let path=
+    '/rest/v1/competitions?select=id,name,category,event_date,description,published,published_at&published=eq.true&or=(published_at.is.null,published_at.lte.'+
+    encodeURIComponent(new Date().toISOString())+
+    ')&order=event_date.desc,created_at.desc';
+
+  if(id){
+    path+='&id=eq.'+encodeURIComponent(id);
+  }else if(category==='Minecraft'||category==='蛋仔'){
+    path+='&category=eq.'+encodeURIComponent(category);
   }
-  const comps=await r.json();
-  if(!comps.length){box.innerHTML='<div class="empty">目前沒有已公布的比賽成績。</div>';return}
-  const all=[];
-  for(const c of comps){
-    const rr=await fetch(SUPABASE_URL+'/rest/v1/competition_results?select=*&competition_id=eq.'+encodeURIComponent(c.id)+'&order=place.asc',{headers:h});
-    const results=rr.ok?await rr.json():[];
-    all.push('<section class="competitionCard"><div class="competitionHeader"><div><div class="date">'+esc(c.category)+' · '+esc(c.event_date||'未設定日期')+'</div><h2>'+esc(c.name)+'</h2></div></div>'+(c.description?'<p class="sub">'+esc(c.description).replace(/\n/g,'<br>')+'</p>':'')+'<div class="competitionResults">'+(results.length?results.map(competitionResultCard).join(''):'<div class="empty">這場比賽尚未輸入成績。</div>')+'</div></section>');
+
+  try{
+    const comps=await supabaseGet(path);
+
+    if(!Array.isArray(comps)||!comps.length){
+      box.innerHTML='<div class="empty">目前沒有已公布的比賽成績。</div>';
+      return;
+    }
+
+    const all=[];
+    for(const c of comps){
+      let results=[];
+      try{
+        results=await supabaseGet(
+          '/rest/v1/competition_results?select=id,competition_id,player_name,place,score,prize&competition_id=eq.'+
+          encodeURIComponent(c.id)+'&order=place.asc'
+        );
+      }catch(e){
+        console.error('比賽成績載入失敗:',c.id,e);
+        results=[];
+      }
+
+      all.push(
+        '<section class="competitionCard">'+
+        '<div class="competitionHeader"><div>'+
+        '<div class="date">'+esc(c.category)+' · '+esc(c.event_date||'未設定日期')+'</div>'+
+        '<h2>'+esc(c.name)+'</h2>'+
+        '</div></div>'+
+        (c.description?'<p class="sub">'+esc(c.description).replace(/\n/g,'<br>')+'</p>':'')+
+        '<div class="competitionResults">'+
+        (results.length?
+          results.map(competitionResultCard).join(''):
+          '<div class="empty">這場比賽尚未輸入成績。</div>')+
+        '</div></section>'
+      );
+    }
+
+    box.innerHTML=all.join('');
+  }catch(e){
+    console.error('載入達人榜失敗:',e);
+    box.innerHTML=
+      '<div class="empty">'+
+      '❌ 歷屆成績載入失敗。<br>'+
+      '<small>'+esc(e.message||String(e))+'</small>'+
+      '</div>';
   }
-  box.innerHTML=all.join('');
 }
 
 window.addEventListener('DOMContentLoaded',()=>{if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();loadCompetitionMenu();if($('competitionList'))loadCompetitionPage();});
