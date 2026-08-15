@@ -180,13 +180,25 @@ async function setCompetitionPublished(id,published){
     });
     const d=await r.json().catch(()=>[]);
     if(!r.ok)throw new Error(d.message||d.hint||('HTTP '+r.status));
+
+    // Some PostgREST/RLS configurations may return an empty representation
+    // even when the UPDATE succeeded. Always re-read the row and verify it.
+    const vr=await fetch(
+      SUPABASE_URL+'/rest/v1/competitions?id=eq.'+encodeURIComponent(id)+'&select=id,published,published_at',
+      {headers:auth()}
+    );
+    const va=vr.ok?await vr.json():[];
+    const row=va[0];
+
     if(published){
-      const row=Array.isArray(d)?d[0]:d;
       if(!row || row.published!==true || !row.published_at){
-        throw new Error('公布狀態更新後未取得正確的 published_at。');
+        throw new Error('公布狀態沒有成功寫入。請檢查目前登入的管理員權限與 competitions 的 UPDATE Policy。');
       }
-      msg('competitionMsg','📢 已立即公布！前台現在即可看到這場比賽。');
+      msg('competitionMsg','📢 已立即公布！published_at 已更新為現在時間。');
     }else{
+      if(row && (row.published!==false || row.published_at!==null)){
+        throw new Error('取消公布沒有成功寫入。');
+      }
       msg('competitionMsg','🔒 已取消公布，前台不再顯示這場比賽。');
     }
     await competitions();
@@ -212,5 +224,12 @@ async function deleteCompetition(id){
 }
 
 function logout(){localStorage.removeItem('access_token');localStorage.removeItem('refresh_token');location.reload()}
-function bind(){if($('loginButton'))$('loginButton').onclick=login;if($('logoutButton'))$('logoutButton').onclick=logout;if($('saveContent'))$('saveContent').onclick=save;if($('publishButton'))$('publishButton').onclick=publish;if($('saveProduct'))$('saveProduct').onclick=saveProduct;if($('clearProduct'))$('clearProduct').onclick=clearProduct;if($('createVisitor'))$('createVisitor').onclick=createVisitor;if($('setSharedVisitorPassword'))$('setSharedVisitorPassword').onclick=setSharedVisitorPassword;if($('createCoupon'))$('createCoupon').onclick=createCoupon;if($('addCompetitionResult'))$('addCompetitionResult').onclick=()=>addCompetitionResult();if($('saveCompetition'))$('saveCompetition').onclick=saveCompetition;if($('publishCompetition'))$('publishCompetition').onclick=async()=>{const ok=await saveCompetition();const id=$('competitionId').value;if(ok&&id)await setCompetitionPublished(id,true)};if($('unpublishCompetition'))$('unpublishCompetition').onclick=async()=>{const id=$('competitionId').value;if(id)await setCompetitionPublished(id,false)};if($('clearCompetition'))$('clearCompetition').onclick=clearCompetition;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabPanel').forEach(x=>x.classList.add('hidden'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));$(b.dataset.tab).classList.remove('hidden');b.classList.add('active');if(b.dataset.tab==='newsTab')news();if(b.dataset.tab==='productTab')products();if(b.dataset.tab==='visitorTab')visitors();if(b.dataset.tab==='couponTab')coupons();if(b.dataset.tab==='competitionTab'){competitions();if(!$('competitionResults').children.length)addCompetitionResult()}if(b.dataset.tab==='supportTab')tickets()})}
+function bind(){if($('loginButton'))$('loginButton').onclick=login;if($('logoutButton'))$('logoutButton').onclick=logout;if($('saveContent'))$('saveContent').onclick=save;if($('publishButton'))$('publishButton').onclick=publish;if($('saveProduct'))$('saveProduct').onclick=saveProduct;if($('clearProduct'))$('clearProduct').onclick=clearProduct;if($('createVisitor'))$('createVisitor').onclick=createVisitor;if($('setSharedVisitorPassword'))$('setSharedVisitorPassword').onclick=setSharedVisitorPassword;if($('createCoupon'))$('createCoupon').onclick=createCoupon;if($('addCompetitionResult'))$('addCompetitionResult').onclick=()=>addCompetitionResult();if($('saveCompetition'))$('saveCompetition').onclick=saveCompetition;if($('publishCompetition'))$('publishCompetition').onclick=async()=>{
+  const ok=await saveCompetition();
+  const id=$('competitionId').value;
+  if(!ok||!id)return;
+  // Publish as one explicit operation after saving the competition/results.
+  // This always overwrites published_at with the current browser time.
+  await setCompetitionPublished(id,true);
+};if($('unpublishCompetition'))$('unpublishCompetition').onclick=async()=>{const id=$('competitionId').value;if(id)await setCompetitionPublished(id,false)};if($('clearCompetition'))$('clearCompetition').onclick=clearCompetition;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabPanel').forEach(x=>x.classList.add('hidden'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));$(b.dataset.tab).classList.remove('hidden');b.classList.add('active');if(b.dataset.tab==='newsTab')news();if(b.dataset.tab==='productTab')products();if(b.dataset.tab==='visitorTab')visitors();if(b.dataset.tab==='couponTab')coupons();if(b.dataset.tab==='competitionTab'){competitions();if(!$('competitionResults').children.length)addCompetitionResult()}if(b.dataset.tab==='supportTab')tickets()})}
 document.addEventListener('DOMContentLoaded',()=>{bind();if(localStorage.getItem('access_token')){$('login').classList.add('hidden');$('dashboard').classList.remove('hidden');load()}else if(!configured())msg('loginError','請把你原本可用的 config.js 放回來。')});
