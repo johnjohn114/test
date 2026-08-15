@@ -168,10 +168,31 @@ async function loadCompetition(id){
   document.querySelector('[data-tab="competitionTab"]').click();
 }
 async function setCompetitionPublished(id,published){
-  const body=published?{published:true,published_at:new Date().toISOString()}:{published:false,published_at:null};
-  const r=await fetch(SUPABASE_URL+'/rest/v1/competitions?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify(body)});
-  if(!r.ok){const d=await r.json().catch(()=>({}));alert('更新公布狀態失敗：'+(d.message||d.hint||('HTTP '+r.status)));return}
-  await competitions();
+  if(!id){alert('找不到比賽 ID，無法更新公布狀態。');return}
+  const body=published
+    ? {published:true,published_at:new Date().toISOString()}
+    : {published:false,published_at:null};
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/competitions?id=eq.'+encodeURIComponent(id),{
+      method:'PATCH',
+      headers:{...auth(),Prefer:'return=representation'},
+      body:JSON.stringify(body)
+    });
+    const d=await r.json().catch(()=>[]);
+    if(!r.ok)throw new Error(d.message||d.hint||('HTTP '+r.status));
+    if(published){
+      const row=Array.isArray(d)?d[0]:d;
+      if(!row || row.published!==true || !row.published_at){
+        throw new Error('公布狀態更新後未取得正確的 published_at。');
+      }
+      msg('competitionMsg','📢 已立即公布！前台現在即可看到這場比賽。');
+    }else{
+      msg('competitionMsg','🔒 已取消公布，前台不再顯示這場比賽。');
+    }
+    await competitions();
+  }catch(e){
+    alert('更新公布狀態失敗：'+(e instanceof Error?e.message:String(e)));
+  }
 }
 async function competitions(){
   if(!$('adminCompetitions')||!configured()||!localStorage.getItem('access_token'))return;
