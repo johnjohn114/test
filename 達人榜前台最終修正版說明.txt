@@ -1,17 +1,16 @@
-達人榜前台最終修正版 v2
+達人榜前台最終修正版 v3
 
-這版針對「HTTP 401: JWT expired」修正。
+本版針對「HTTP 401: JWT expired」修正。
 
-核心修正：
-1. 歷屆比賽（competitions）與比賽成績（competition_results）的公開查詢不再使用 visitor_access_token。
-2. 查詢固定使用 Supabase anon key，避免訪客瀏覽器裡的過期 JWT 造成 401。
-3. 前台仍只查詢 published = true 且 published_at 尚未到期的比賽。
-4. 如果前台改用 anon key 後仍收到 401，頁面會提示檢查 Supabase RLS 公開讀取政策。
-5. index.html / competitions.html 已更新 app.js cache-busting 版本。
-6. 保留原本 config.js：本 ZIP 不包含也不替換 config.js。
+修正內容：
+1. 歷屆達人榜／competitions 公開查詢不再使用 visitor_access_token。
+2. 查詢只使用 SUPABASE_ANON_KEY，避免 localStorage 的過期訪客 JWT 造成 401。
+3. 保留原本 published=true 與 published_at 條件。
+4. 不修改後台、Edge Function、SQL、config.js。
+5. 已更新 app.js cache-busting 版本為 v3。
 
-使用：
-- 將本 ZIP 的 app.js、index.html、competitions.html 覆蓋目前網站對應檔案。
-- 不需要重新 Deploy Edge Function。
-- 不需要重新執行 SQL（前提是 competitions 與 competition_results 已有允許前台讀取已公布資料的 RLS policy）。
-- GitHub Pages 更新後用 Ctrl+F5 強制重新整理。
+部署方式：
+- 將 app.js、index.html、competitions.html 覆蓋目前網站的同名檔案。
+- 不要替換原本 config.js。
+- GitHub Pages 部署完成後使用 Ctrl+F5。
+- 不需要重新跑 SQL，也不需要重新部署 Edge Function。
