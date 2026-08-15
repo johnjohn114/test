@@ -1,0 +1,4 @@
+本次修正：
+1. 歷屆比賽成績頁不再要求 visitor_access_token 才載入已公布比賽。
+2. 前台若 Supabase 查詢失敗，會顯示 HTTP 狀態碼並在 Console 留下詳細錯誤，方便排查。
+3. 其他功能與資料庫 SQL 未修改。

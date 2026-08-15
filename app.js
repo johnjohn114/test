@@ -63,7 +63,13 @@ async function loadCompetitionPage(){
   if(id)url+='&id=eq.'+encodeURIComponent(id);
   else if(category&&(category==='Minecraft'||category==='蛋仔'))url+='&category=eq.'+encodeURIComponent(category);
   const r=await fetch(url,{headers:h});
-  const comps=r.ok?await r.json():[];
+  if(!r.ok){
+    const detail=await r.text().catch(()=> '');
+    console.error('載入達人榜失敗:',r.status,detail);
+    box.innerHTML='<div class="empty">目前無法載入比賽成績（'+esc(r.status)+'）。</div>';
+    return;
+  }
+  const comps=await r.json();
   if(!comps.length){box.innerHTML='<div class="empty">目前沒有已公布的比賽成績。</div>';return}
   const all=[];
   for(const c of comps){
@@ -74,4 +80,4 @@ async function loadCompetitionPage(){
   box.innerHTML=all.join('');
 }
 
-window.addEventListener('DOMContentLoaded',()=>{if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();loadCompetitionMenu();if($('competitionList')&&visitorToken())loadCompetitionPage();});
+window.addEventListener('DOMContentLoaded',()=>{if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();loadCompetitionMenu();if($('competitionList'))loadCompetitionPage();});
