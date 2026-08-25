@@ -147,10 +147,31 @@ create index if not exists coupons_expires_at_idx on public.coupons(expires_at);
 
 
 -- 達人榜：管理員建立比賽、輸入成績，確認後再公布。
+-- 達人榜分類（管理員可自行新增分類）
+create table if not exists public.competition_categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  sort_order integer not null default 100,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+alter table public.competition_categories enable row level security;
+
+drop policy if exists competition_categories_admin_all on public.competition_categories;
+create policy competition_categories_admin_all on public.competition_categories
+  for all to authenticated
+  using(public.is_admin())
+  with check(public.is_admin());
+
+insert into public.competition_categories(name, sort_order)
+values ('Minecraft', 10), ('蛋仔', 20)
+on conflict (name) do nothing;
+
 create table if not exists public.competitions (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  category text not null default 'Minecraft' check(category in ('Minecraft','蛋仔')),
+  category text not null default 'Minecraft',
   event_date date,
   description text,
   published boolean not null default false,
@@ -168,6 +189,19 @@ create table if not exists public.competition_results (
   prize text,
   created_at timestamptz not null default now()
 );
+
+
+-- 將既有比賽中已存在的自訂分類帶入分類清單
+insert into public.competition_categories(name, sort_order)
+select distinct trim(category), 100
+from public.competitions
+where category is not null
+  and trim(category) <> ''
+on conflict (name) do nothing;
+
+-- 移除舊版僅允許 Minecraft／蛋仔 的限制，讓管理員可以新增其他種類
+alter table public.competitions
+drop constraint if exists competitions_category_check;
 
 alter table public.competitions enable row level security;
 alter table public.competition_results enable row level security;
