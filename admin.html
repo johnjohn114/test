@@ -13,7 +13,16 @@
 <div class="editor">
 <input id="competitionId" type="hidden">
 <label>比賽名稱<input id="competitionName" placeholder="例如：Minecraft 建築大賽 #1"></label>
-<label>分類<select id="competitionCategory"><option value="Minecraft">Minecraft</option><option value="蛋仔">蛋仔</option></select></label>
+<label>分類<select id="competitionCategory"></select></label>
+<div id="competitionCategoryManager" style="margin:10px 0 18px;padding:14px;border:1px solid #e6d9f7;border-radius:12px;background:#fbf8ff;">
+  <strong>分類管理</strong>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+    <input id="competitionCategoryNew" type="text" placeholder="輸入新分類，例如：Roblox" style="flex:1;min-width:220px;">
+    <button type="button" class="btn secondary" id="addCompetitionCategory">＋ 新增分類</button>
+  </div>
+  <div id="competitionCategoryList" style="margin-top:10px;"></div>
+  <small style="display:block;margin-top:8px;opacity:.75;">Minecraft、蛋仔為預設分類；已有比賽使用中的分類不能直接刪除。</small>
+</div>
 <label>比賽日期<input id="competitionDate" type="date"></label>
 <label>比賽說明<textarea id="competitionDescription" rows="4" placeholder="比賽規則、主題或其他說明"></textarea></label>
 <div class="resultEditor">

@@ -189,15 +189,18 @@ async function competitionCategories(){
     const current=sel.value;
     sel.innerHTML=rows.map(c=>'<option value="'+esc(c.name)+'">'+esc(c.name)+'</option>').join('');
     if(current && rows.some(c=>c.name===current))sel.value=current;
-    else if(rows[0])sel.value=rows[0].name;
 
     const box=$('competitionCategoryList');
     if(box){
       box.innerHTML=rows.map(c=>{
-        const safeId=esc(c.id);
-        const buttons=(c.name==='Minecraft'||c.name==='蛋仔') ? '<span class="sub">預設分類</span>' : '<button type="button" class="btn secondary categoryEdit" data-cat-edit="'+safeId+'" data-cat-name="'+esc(c.name)+'">✏️ 修改</button> <button type="button" class="btn secondary categoryDelete" data-cat-del="'+safeId+'" data-cat-name="'+esc(c.name)+'">🗑️ 刪除</button>';
-        return '<article class="notice"><div class="date">'+(false?'⭐ ':'')+esc(c.name)+'</div>'+buttons+'</article>';
-      }).join('') || '<div class="empty">目前沒有分類。</div>';
+        const isDefault=c.name==='Minecraft'||c.name==='蛋仔';
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid #eee;">'
+          +'<span>'+esc(c.name)+'</span>'
+          +(isDefault
+            ? '<span style="opacity:.7;font-size:.9em;">🔒 預設分類</span>'
+            : '<span><button type="button" class="btn secondary categoryEdit" data-cat-edit="'+esc(c.id)+'" data-cat-name="'+esc(c.name)+'">✏️ 修改</button> <button type="button" class="btn secondary categoryDelete" data-cat-del="'+esc(c.id)+'" data-cat-name="'+esc(c.name)+'">🗑️ 刪除</button></span>')
+          +'</div>';
+      }).join('')||'<div class="empty">目前沒有分類。</div>';
       box.querySelectorAll('[data-cat-edit]').forEach(b=>b.onclick=()=>editCompetitionCategory(b.dataset.catEdit,b.dataset.catName));
       box.querySelectorAll('[data-cat-del]').forEach(b=>b.onclick=()=>deleteCompetitionCategory(b.dataset.catDel,b.dataset.catName));
     }
