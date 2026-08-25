@@ -40,17 +40,91 @@ async function loadMyCoupons(){
   box.innerHTML=rows.length?rows.map(couponCard).join(''):'<div class="empty">目前沒有優惠券。</div>';
 }
 
+const competitionCategoryIcon=name=>{
+  const icons={Minecraft:'🎮',蛋仔:'🥚'};
+  return icons[name]||'🏆';
+};
+
+async function fetchCompetitionCategories(headers){
+  // 優先使用後台管理的分類表；若公開 RLS 尚未開放，則自動由已公布比賽回推分類。
+  let categories=[];
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories?select=id,name&order=name.asc',{headers});
+    if(r.ok){
+      const rows=await r.json();
+      categories=rows.map(x=>x.name).filter(Boolean);
+    }
+  }catch(e){
+    console.warn('讀取分類表失敗，改用已公布比賽分類。',e);
+  }
+  return [...new Set(categories)];
+}
+
 async function loadCompetitionMenu(){
   const menu=$('competitionMenu');
   if(!menu||!configured())return;
   const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY};
-  const r=await fetch(SUPABASE_URL+'/rest/v1/competitions?select=id,name,category&published=eq.true&order=event_date.desc,created_at.desc',{headers:h});
+
+  const r=await fetch(
+    SUPABASE_URL+'/rest/v1/competitions?select=id,name,category&published=eq.true&order=event_date.desc,created_at.desc',
+    {headers:h}
+  );
   const rows=r.ok?await r.json():[];
-  const groups={Minecraft:[],蛋仔:[]};
-  rows.forEach(x=>{if(groups[x.category])groups[x.category].push(x)});
-  const links=cat=>groups[cat].length?groups[cat].map(x=>'<a href="competitions.html?id='+encodeURIComponent(x.id)+'">'+esc(x.name)+'</a>').join(''):'<span class="dropdownEmpty">目前沒有公布比賽</span>';
-  menu.innerHTML='<a href="competitions.html">📚 全部歷屆成績</a><div class="dropdownGroup"><b>🎮 Minecraft</b>'+links('Minecraft')+'</div><div class="dropdownGroup"><b>🥚 蛋仔</b>'+links('蛋仔')+'</div>';
+
+  let categories=await fetchCompetitionCategories(h);
+  rows.forEach(x=>{if(x.category&&!categories.includes(x.category))categories.push(x.category);});
+
+  if(!categories.length){
+    menu.innerHTML='<a href="competitions.html">📚 全部歷屆成績</a><span class="dropdownEmpty">目前沒有分類</span>';
+    return;
+  }
+
+  const groups={};
+  categories.forEach(cat=>groups[cat]=[]);
+  rows.forEach(x=>{
+    if(x.category){
+      (groups[x.category]||(groups[x.category]=[])).push(x);
+    }
+  });
+
+  menu.innerHTML='<a href="competitions.html">📚 全部歷屆成績</a>'
+    +categories.map(cat=>{
+      const icon=competitionCategoryIcon(cat);
+      const items=groups[cat]||[];
+      const list=items.length
+        ? items.map(x=>'<a href="competitions.html?id='+encodeURIComponent(x.id)+'">'+esc(x.name)+'</a>').join('')
+        : '<span class="dropdownEmpty">目前沒有公布比賽</span>';
+      return '<div class="dropdownGroup"><b>'+icon+' '+esc(cat)+'</b>'
+        +'<a href="competitions.html?category='+encodeURIComponent(cat)+'">查看 '+esc(cat)+' 全部成績</a>'
+        +list+'</div>';
+    }).join('');
 }
+
+async function loadCompetitionFilters(){
+  const box=$('competitionFilters');
+  if(!box||!configured())return;
+
+  const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY};
+  const params=new URLSearchParams(location.search);
+  const current=params.get('category')||'';
+
+  const r=await fetch(
+    SUPABASE_URL+'/rest/v1/competitions?select=category&published=eq.true',
+    {headers:h}
+  );
+  const rows=r.ok?await r.json():[];
+
+  let categories=await fetchCompetitionCategories(h);
+  rows.forEach(x=>{if(x.category&&!categories.includes(x.category))categories.push(x.category);});
+
+  box.innerHTML='<a class="'+(!current?'active':'')+'" href="competitions.html">全部</a>'
+    +categories.map(cat=>{
+      const active=current===cat?'active':'';
+      return '<a class="'+active+'" href="competitions.html?category='+encodeURIComponent(cat)+'">'
+        +competitionCategoryIcon(cat)+' '+esc(cat)+'</a>';
+    }).join('');
+}
+
 async function loadQuickLinks(){
   const panel=$('quickLinksPanel');
   const list=$('quickLinksList');
@@ -96,7 +170,7 @@ async function loadCompetitionPage(){
   const category=params.get('category');
   let url=SUPABASE_URL+'/rest/v1/competitions?select=*&published=eq.true&order=event_date.desc,created_at.desc';
   if(id)url+='&id=eq.'+encodeURIComponent(id);
-  else if(category&&(category==='Minecraft'||category==='蛋仔'))url+='&category=eq.'+encodeURIComponent(category);
+  else if(category)url+='&category=eq.'+encodeURIComponent(category);
   const r=await fetch(url,{headers:h});
   const comps=r.ok?await r.json():[];
   if(!comps.length){box.innerHTML='<div class="empty">目前沒有已公布的比賽成績。</div>';return}
@@ -109,4 +183,4 @@ async function loadCompetitionPage(){
   box.innerHTML=all.join('');
 }
 
-window.addEventListener('DOMContentLoaded',()=>{if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();loadQuickLinks();loadCompetitionMenu();if($('competitionList')&&visitorToken())loadCompetitionPage();});
+window.addEventListener('DOMContentLoaded',()=>{if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();loadQuickLinks();loadCompetitionMenu();loadCompetitionFilters();if($('competitionList')&&visitorToken())loadCompetitionPage();});
