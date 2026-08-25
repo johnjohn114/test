@@ -37,6 +37,8 @@ alter table public.announcements add column if not exists category text not null
 alter table public.announcements add column if not exists pinned boolean not null default false;
 alter table public.announcements add column if not exists published_at timestamptz not null default now();
 alter table public.announcements add column if not exists updated_at timestamptz not null default now();
+alter table public.announcements add column if not exists link_url text;
+alter table public.announcements add column if not exists link_label text;
 
 -- 商品
 create table if not exists public.products (
@@ -195,6 +197,29 @@ create index if not exists competitions_category_idx on public.competitions(cate
 create index if not exists competitions_published_idx on public.competitions(published, published_at);
 create index if not exists competition_results_competition_idx on public.competition_results(competition_id);
 create index if not exists competition_results_place_idx on public.competition_results(competition_id, place);
+-- 達人榜公布時間由資料庫自動決定，避免瀏覽器時區／前端時間造成未來時間。
+create or replace function public.set_competition_publish_time()
+returns trigger
+language plpgsql
+security invoker
+set search_path=public
+as $$
+begin
+  if NEW.published = true then
+    NEW.published_at := now();
+  else
+    NEW.published_at := null;
+  end if;
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trg_competition_publish_time on public.competitions;
+create trigger trg_competition_publish_time
+before insert or update of published
+on public.competitions
+for each row execute function public.set_competition_publish_time();
+
 
 -- 快速連結
 create table if not exists public.quick_links (
@@ -218,3 +243,5 @@ for select to public using (visible = true);
 drop policy if exists "quick_links_admin_all" on public.quick_links;
 create policy "quick_links_admin_all" on public.quick_links
 for all to public using (is_admin()) with check (is_admin());
+
+

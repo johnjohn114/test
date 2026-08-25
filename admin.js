@@ -7,10 +7,18 @@ async function login(){if(!configured()){msg('loginError','請把可用的 confi
 async function load(){await content();await news();await products();await visitors();await coupons();await competitions();await quickLinks();await tickets()}
 async function content(){if(!configured()||!localStorage.getItem('access_token'))return;const r=await fetch(SUPABASE_URL+'/rest/v1/site_settings?select=*&id=eq.1',{headers:auth()});if(r.status===401){logout();return}if(!r.ok)return;const a=await r.json();if(a[0])F.forEach(k=>{if($(k))$(k).value=a[0][k]??''})}
 async function save(){const body={};F.forEach(k=>body[k]=$(k)?.value||'');const r=await fetch(SUPABASE_URL+'/rest/v1/site_settings?id=eq.1',{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify(body)});msg('contentMsg',r.ok?'✅ 已儲存':'❌ 儲存失敗：請檢查 RLS 權限。')}
-async function publish(){const id=$('announcementId')?.value||'';const body={title:$('title').value.trim(),category:$('category').value,published_at:new Date($('published_at').value||new Date()).toISOString(),pinned:$('pinned').checked,content:$('content').value,published:true};if(!body.title||!body.content){msg('publishMsg','請填寫標題與內容。');return}const url=SUPABASE_URL+'/rest/v1/announcements'+(id?'?id=eq.'+encodeURIComponent(id):'');const r=await fetch(url,{method:id?'PATCH':'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify(body)});msg('publishMsg',r.ok?'✅ 已儲存公告':'❌ 儲存失敗：請檢查 announcements RLS。');if(r.ok){clearAnnouncement();await news()}}
-function clearAnnouncement(){$('title').value='';$('content').value='';$('category').value='最新消息';$('published_at').value='';$('pinned').checked=false;if($('announcementId'))$('announcementId').value=''}
-async function news(){if(!configured()||!localStorage.getItem('access_token'))return;const r=await fetch(SUPABASE_URL+'/rest/v1/announcements?select=*&order=pinned.desc,published_at.desc,created_at.desc',{headers:auth()});if(!r.ok)return;const a=await r.json();$('adminList').innerHTML=a.map(x=>'<article class="notice"><div class="date">'+(x.pinned?'📌 ':'')+esc(x.category)+' · '+esc(String(x.published_at||x.date||'').slice(0,16).replace('T',' '))+'</div><h3>'+esc(x.title)+'</h3><p>'+esc(x.content).replace(/\n/g,'<br>')+'</p><button data-edit="'+esc(x.id)+'">✏️ 編輯</button> <button data-del="'+esc(x.id)+'">🗑️ 刪除</button></article>').join('')||'<div class="empty">目前沒有公告。</div>';document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delAnnouncement(b.dataset.del));document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editAnnouncement(b.dataset.edit))}
-async function editAnnouncement(id){const r=await fetch(SUPABASE_URL+'/rest/v1/announcements?id=eq.'+encodeURIComponent(id)+'&select=*',{headers:auth()});const a=r.ok?await r.json():[];const x=a[0];if(!x)return;$('announcementId')?.setAttribute('value',x.id);if(!$('announcementId')){const i=document.createElement('input');i.type='hidden';i.id='announcementId';document.querySelector('#newsTab .editor').prepend(i);i.value=x.id}else $('announcementId').value=x.id;$('title').value=x.title||'';$('content').value=x.content||'';$('category').value=x.category||'最新消息';$('pinned').checked=!!x.pinned;$('published_at').value=x.published_at?new Date(x.published_at).toISOString().slice(0,16):'';document.querySelector('[data-tab="newsTab"]').click();}
+async function publish(){const id=$('announcementId')?.value||'';const body={title:$('title').value.trim(),category:$('category').value,published_at:new Date($('published_at').value||new Date()).toISOString(),pinned:$('pinned').checked,content:$('content').value,link_url:$('linkUrl').value.trim()||null,link_label:$('linkLabel').value.trim()||null,published:true};if(!body.title||!body.content){msg('publishMsg','請填寫標題與內容。');return}const url=SUPABASE_URL+'/rest/v1/announcements'+(id?'?id=eq.'+encodeURIComponent(id):'');const r=await fetch(url,{method:id?'PATCH':'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify(body)});msg('publishMsg',r.ok?'✅ 已儲存公告':'❌ 儲存失敗：請檢查 announcements RLS。');if(r.ok){clearAnnouncement();await news()}}
+function clearAnnouncement(){$('title').value='';$('content').value='';$('category').value='最新消息';$('published_at').value='';$('pinned').checked=false;if($('linkUrl'))$('linkUrl').value='';if($('linkLabel'))$('linkLabel').value='';if($('announcementId'))$('announcementId').value=''}
+async function news(){
+  if(!configured()||!localStorage.getItem('access_token'))return;
+  const r=await fetch(SUPABASE_URL+'/rest/v1/announcements?select=*&order=pinned.desc,published_at.desc,created_at.desc',{headers:auth()});
+  if(!r.ok)return;
+  const a=await r.json();
+  $('adminList').innerHTML=a.map(x=>'<article class="notice"><div class="date">'+(x.pinned?'📌 ':'')+esc(x.category)+' · '+esc(String(x.published_at||x.date||'').slice(0,16).replace('T',' '))+'</div><h3>'+esc(x.title)+'</h3><p>'+esc(x.content).replace(/\n/g,'<br>')+(x.link_url?'<br><a href="'+esc(x.link_url)+'" target="_blank" rel="noopener noreferrer">🔗 '+esc(x.link_label||'查看連結')+'</a>':'')+'</p><button data-edit="'+esc(x.id)+'">✏️ 編輯</button> <button data-del="'+esc(x.id)+'">🗑️ 刪除</button></article>').join('')||'<div class="empty">目前沒有公告。</div>';
+  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delAnnouncement(b.dataset.del));
+  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editAnnouncement(b.dataset.edit));
+}
+async function editAnnouncement(id){const r=await fetch(SUPABASE_URL+'/rest/v1/announcements?id=eq.'+encodeURIComponent(id)+'&select=*',{headers:auth()});const a=r.ok?await r.json():[];const x=a[0];if(!x)return;$('announcementId')?.setAttribute('value',x.id);if(!$('announcementId')){const i=document.createElement('input');i.type='hidden';i.id='announcementId';document.querySelector('#newsTab .editor').prepend(i);i.value=x.id}else $('announcementId').value=x.id;$('title').value=x.title||'';$('content').value=x.content||'';$('category').value=x.category||'最新消息';$('pinned').checked=!!x.pinned;$('published_at').value=x.published_at?new Date(x.published_at).toISOString().slice(0,16):'';if($('linkUrl'))$('linkUrl').value=x.link_url||'';if($('linkLabel'))$('linkLabel').value=x.link_label||'';document.querySelector('[data-tab="newsTab"]').click();}
 async function delAnnouncement(id){if(!confirm('確定刪除這則公告？'))return;const r=await fetch(SUPABASE_URL+'/rest/v1/announcements?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:auth()});if(!r.ok){let d=await r.json().catch(()=>({}));alert('刪除失敗：'+(d.message||d.hint||('HTTP '+r.status)));return}await news()}
 async function products(){if(!$('adminProducts')||!configured()||!localStorage.getItem('access_token'))return;const r=await fetch(SUPABASE_URL+'/rest/v1/products?select=*&order=created_at.desc',{headers:auth()});const a=r.ok?await r.json():[];$('adminProducts').innerHTML=a.map(p=>'<article class="productCard">'+(p.image_url?'<img src="'+esc(p.image_url)+'" alt="'+esc(p.name)+'">':'<div class="productImage">📦</div>')+'<div class="productBody"><div class="date">'+(p.active?'🟢 上架':'⚪ 下架')+' · '+esc(p.category||'')+'</div><h3>'+esc(p.name)+'</h3><p>'+esc(p.description||'')+'</p><strong>NT$ '+Number(p.price||0).toLocaleString()+'</strong><div><button data-pedit="'+p.id+'">✏️ 編輯</button> <button data-pdel="'+p.id+'">🗑️ 刪除</button></div></div></article>').join('')||'<div class="empty">目前沒有商品。</div>';document.querySelectorAll('[data-pdel]').forEach(b=>b.onclick=()=>deleteProduct(b.dataset.pdel));document.querySelectorAll('[data-pedit]').forEach(b=>b.onclick=()=>editProduct(b.dataset.pedit))}
 async function saveProduct(){const id=$('productId').value;const body={name:$('productName').value.trim(),category:$('productCategory').value.trim(),price:Number($('productPrice').value||0),image_url:$('productImage').value.trim(),description:$('productDescription').value,active:$('productActive').checked};if(!body.name){msg('productMsg','請輸入商品名稱。');return}const r=await fetch(SUPABASE_URL+'/rest/v1/products'+(id?'?id=eq.'+encodeURIComponent(id):''),{method:id?'PATCH':'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify(body)});msg('productMsg',r.ok?'✅ 商品已儲存':'❌ 商品儲存失敗');if(r.ok){clearProduct();await products()}}
@@ -21,7 +29,7 @@ async function visitors(){
   if(!$('visitorList')||!configured()||!localStorage.getItem('access_token'))return;
   const r=await fetch(SUPABASE_URL+'/rest/v1/visitor_accounts?select=*&order=created_at.desc',{headers:auth()});
   const a=r.ok?await r.json():[];
-  $('visitorList').innerHTML=a.map(v=>'<article class="notice"><div class="date">'+esc(v.active?'🟢 啟用':'⚪ 停用')+'</div><h3>'+esc(v.email)+'</h3></article>').join('')||'<div class="empty">目前沒有訪客帳號。</div>';
+  $('visitorList').innerHTML=a.map(v=>'<article class="notice"><div class="date">'+esc(v.active?'🟢 啟用':'⚪ 停用')+'</div><h3>'+esc(v.email)+'</h3><button data-vdel="'+esc(v.id)+'">🗑️ 刪除訪客</button></article>').join('')||'<div class="empty">目前沒有訪客帳號。</div>';document.querySelectorAll('[data-vdel]').forEach(b=>b.onclick=()=>deleteVisitor(b.dataset.vdel));
   const sel=$('couponVisitor');
   if(sel) sel.innerHTML='<option value="all">全部訪客</option>'+a.filter(v=>v.active).map(v=>'<option value="'+esc(v.id)+'">'+esc(v.email)+'</option>').join('');
 }
@@ -59,6 +67,12 @@ async function setSharedVisitorPassword(){
     }
     msg('sharedPasswordMsg','✅ 已將統一密碼套用到 '+count+' 位訪客。');
   }catch(e){msg('sharedPasswordMsg','❌ '+e.message)}
+}
+async function deleteVisitor(id){
+  if(!id)return;
+  if(!confirm('確定要刪除這個訪客帳號？這會同時刪除其優惠券、客服紀錄與登入帳號，無法復原。'))return;
+  try{await callEdge('delete-visitor',{user_id:id});msg('visitorMsg','✅ 訪客帳號已刪除。');await visitors()}
+  catch(e){msg('visitorMsg','❌ '+e.message)}
 }
 async function coupons(){
   if(!$('adminCoupons')||!configured()||!localStorage.getItem('access_token'))return;
@@ -205,10 +219,25 @@ async function loadCompetition(id){
   document.querySelector('[data-tab="competitionTab"]').click();
 }
 async function setCompetitionPublished(id,published){
-  const body=published?{published:true,published_at:new Date().toISOString()}:{published:false,published_at:null};
-  const r=await fetch(SUPABASE_URL+'/rest/v1/competitions?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify(body)});
-  if(!r.ok){const d=await r.json().catch(()=>({}));alert('更新公布狀態失敗：'+(d.message||d.hint||('HTTP '+r.status)));return}
-  await competitions();
+  if(!id){alert('找不到比賽 ID，無法更新公布狀態。');return}
+  const body=published?{published:true}:{published:false};
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/competitions?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify(body)});
+    const d=await r.json().catch(()=>[]);
+    if(!r.ok)throw new Error(d.message||d.hint||('HTTP '+r.status));
+    const vr=await fetch(SUPABASE_URL+'/rest/v1/competitions?id=eq.'+encodeURIComponent(id)+'&select=id,published,published_at',{headers:auth()});
+    const va=vr.ok?await vr.json():[];const row=va[0];
+    if(published){
+      if(!row||row.published!==true||!row.published_at)throw new Error('公布狀態沒有成功寫入。請先執行新版 schema_upgrade_rerunnable.sql。');
+      const pt=new Date(row.published_at).getTime();
+      if(!Number.isFinite(pt)||pt>Date.now()+5000)throw new Error('資料庫的 published_at 仍是未來時間：'+row.published_at);
+      msg('competitionMsg','📢 已立即公布！公布時間由資料庫自動設定。');
+    }else{
+      if(row&&(row.published!==false||row.published_at!==null))throw new Error('取消公布沒有成功寫入。');
+      msg('competitionMsg','🔒 已取消公布。');
+    }
+    await competitions();
+  }catch(e){alert('更新公布狀態失敗：'+(e instanceof Error?e.message:String(e)))}
 }
 async function competitions(){
   if(!$('adminCompetitions')||!configured()||!localStorage.getItem('access_token'))return;
