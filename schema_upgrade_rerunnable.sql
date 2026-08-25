@@ -195,3 +195,26 @@ create index if not exists competitions_category_idx on public.competitions(cate
 create index if not exists competitions_published_idx on public.competitions(published, published_at);
 create index if not exists competition_results_competition_idx on public.competition_results(competition_id);
 create index if not exists competition_results_place_idx on public.competition_results(competition_id, place);
+
+-- 快速連結
+create table if not exists public.quick_links (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  url text not null,
+  icon text,
+  sort_order integer not null default 1,
+  visible boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.quick_links add column if not exists icon text;
+alter table public.quick_links add column if not exists sort_order integer not null default 1;
+alter table public.quick_links add column if not exists visible boolean not null default true;
+alter table public.quick_links add column if not exists updated_at timestamptz not null default now();
+alter table public.quick_links enable row level security;
+drop policy if exists "quick_links_public_read" on public.quick_links;
+create policy "quick_links_public_read" on public.quick_links
+for select to public using (visible = true);
+drop policy if exists "quick_links_admin_all" on public.quick_links;
+create policy "quick_links_admin_all" on public.quick_links
+for all to public using (is_admin()) with check (is_admin());

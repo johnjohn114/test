@@ -48,6 +48,28 @@ async function loadCompetitionMenu(){
   const links=cat=>groups[cat].length?groups[cat].map(x=>'<a href="competitions.html?id='+encodeURIComponent(x.id)+'">'+esc(x.name)+'</a>').join(''):'<span class="dropdownEmpty">目前沒有公布比賽</span>';
   menu.innerHTML='<a href="competitions.html">📚 全部歷屆成績</a><div class="dropdownGroup"><b>🎮 Minecraft</b>'+links('Minecraft')+'</div><div class="dropdownGroup"><b>🥚 蛋仔</b>'+links('蛋仔')+'</div>';
 }
+async function loadQuickLinks(){
+  const panel=$('quickLinksPanel');
+  const list=$('quickLinksList');
+  if(!panel||!list||!configured()){if(panel)panel.classList.add('hidden');return}
+  const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY};
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/quick_links?select=id,name,url,icon,sort_order&visible=eq.true&order=sort_order.asc,created_at.asc',{headers:h});
+    if(!r.ok){panel.classList.add('hidden');return}
+    const rows=await r.json();
+    if(!rows.length){panel.classList.add('hidden');return}
+    list.innerHTML=rows.map(x=>{
+      const icon=x.icon?'<span class="quickLinkIcon">'+esc(x.icon)+'</span>':'<span class="quickLinkIcon">🔗</span>';
+      const target=/^https?:\/\//i.test(x.url)?' target="_blank" rel="noopener noreferrer"':'';
+      return '<a class="quickLinkItem" href="'+esc(x.url)+'"'+target+'>'+icon+'<span>'+esc(x.name)+'</span></a>';
+    }).join('');
+    panel.classList.remove('hidden');
+  }catch(e){
+    console.error('快速連結載入失敗:',e);
+    panel.classList.add('hidden');
+  }
+}
+
 function competitionResultCard(r){
   const medal=r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':'';
   return '<article class="notice competitionResult"><div class="date">'+medal+' 第 '+esc(r.place)+' 名</div><h3>'+esc(r.player_name)+'</h3>'+(r.score!==null&&r.score!==undefined&&r.score!==''?'<p><b>分數：</b>'+esc(r.score)+'</p>':'')+(r.prize?'<p><b>獎項：</b>'+esc(r.prize)+'</p>':'')+'</article>';
@@ -74,4 +96,4 @@ async function loadCompetitionPage(){
   box.innerHTML=all.join('');
 }
 
-window.addEventListener('DOMContentLoaded',()=>{if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();loadCompetitionMenu();if($('competitionList')&&visitorToken())loadCompetitionPage();});
+window.addEventListener('DOMContentLoaded',()=>{if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();loadQuickLinks();loadCompetitionMenu();if($('competitionList')&&visitorToken())loadCompetitionPage();});
