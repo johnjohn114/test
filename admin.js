@@ -4,7 +4,7 @@ function configured(){return typeof SUPABASE_URL!=='undefined'&&typeof SUPABASE_
 function auth(){const t=localStorage.getItem('access_token');return {'Content-Type':'application/json',apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+(t||SUPABASE_ANON_KEY)}}
 function msg(id,t){if($(id))$(id).textContent=t}
 async function login(){if(!configured()){msg('loginError','請把可用的 config.js 放回來。');return}const email=$('email').value.trim(),password=$('password').value;if(!email||!password){msg('loginError','請輸入 Email 與密碼。');return}msg('loginError','登入中…');try{const r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json',apikey:SUPABASE_ANON_KEY},body:JSON.stringify({email,password})});const d=await r.json().catch(()=>({}));if(!r.ok||!d.access_token){msg('loginError',d.error_description||d.msg||'登入失敗。');return}localStorage.setItem('access_token',d.access_token);if(d.refresh_token)localStorage.setItem('refresh_token',d.refresh_token);const pr=await fetch(SUPABASE_URL+'/rest/v1/profiles?select=role&id=eq.'+encodeURIComponent(d.user?.id||'') ,{headers:{...auth(),'Authorization':'Bearer '+d.access_token}});const pa=pr.ok?await pr.json():[];if(pa[0]?.role!=='admin'){localStorage.removeItem('access_token');localStorage.removeItem('refresh_token');msg('loginError','此帳號不是管理員帳號。');return} $('login').classList.add('hidden');$('dashboard').classList.remove('hidden');await load() }catch(e){console.error(e);msg('loginError','無法連線到 Supabase。')}}
-async function load(){await content();await news();await products();await visitors();await coupons();await loadCompetitionCategories();await competitions();await quickLinks();await tickets()}
+async function load(){await content();await news();await products();await visitors();await coupons();await competitions();await quickLinks();await tickets()}
 async function content(){if(!configured()||!localStorage.getItem('access_token'))return;const r=await fetch(SUPABASE_URL+'/rest/v1/site_settings?select=*&id=eq.1',{headers:auth()});if(r.status===401){logout();return}if(!r.ok)return;const a=await r.json();if(a[0])F.forEach(k=>{if($(k))$(k).value=a[0][k]??''})}
 async function save(){const body={};F.forEach(k=>body[k]=$(k)?.value||'');const r=await fetch(SUPABASE_URL+'/rest/v1/site_settings?id=eq.1',{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify(body)});msg('contentMsg',r.ok?'✅ 已儲存':'❌ 儲存失敗：請檢查 RLS 權限。')}
 async function publish(){const id=$('announcementId')?.value||'';const body={title:$('title').value.trim(),category:$('category').value,published_at:new Date($('published_at').value||new Date()).toISOString(),pinned:$('pinned').checked,content:$('content').value,link_url:$('linkUrl').value.trim()||null,link_label:$('linkLabel').value.trim()||null,published:true};if(!body.title||!body.content){msg('publishMsg','請填寫標題與內容。');return}const url=SUPABASE_URL+'/rest/v1/announcements'+(id?'?id=eq.'+encodeURIComponent(id):'');const r=await fetch(url,{method:id?'PATCH':'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify(body)});msg('publishMsg',r.ok?'✅ 已儲存公告':'❌ 儲存失敗：請檢查 announcements RLS。');if(r.ok){clearAnnouncement();await news()}}
@@ -151,60 +151,10 @@ async function deleteQuickLink(id){
 async function tickets(){if(!$('ticketList')||!configured()||!localStorage.getItem('access_token'))return;const r=await fetch(SUPABASE_URL+'/rest/v1/support_tickets?select=*&order=created_at.desc',{headers:auth()});const a=r.ok?await r.json():[];$('ticketList').innerHTML=a.map(t=>'<article class="notice"><div class="date">'+esc(t.status)+' · '+esc(String(t.created_at).slice(0,16).replace('T',' '))+'</div><h3>'+esc(t.subject)+'</h3><p>'+esc(t.message).replace(/\n/g,'<br>')+'</p><label>管理員回覆<textarea data-reply="'+t.id+'" rows="4">'+esc(t.admin_reply||'')+'</textarea></label><button data-replybtn="'+t.id+'">💬 儲存回覆</button></article>').join('')||'<div class="empty">目前沒有客服訊息。</div>';document.querySelectorAll('[data-replybtn]').forEach(b=>b.onclick=()=>replyTicket(b.dataset.replybtn))}
 async function replyTicket(id){const ta=document.querySelector('[data-reply="'+CSS.escape(id)+'"]');const reply=ta?ta.value:'';const r=await fetch(SUPABASE_URL+'/rest/v1/support_tickets?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({admin_reply:reply,status:reply?'answered':'open'})});alert(r.ok?'已儲存回覆。':'儲存失敗。');if(r.ok)await tickets()}
 
-
-async function loadCompetitionCategories(preferred=''){
-  const sel=$('competitionCategory');
-  if(!sel||!configured()||!localStorage.getItem('access_token'))return;
-  const current=preferred||sel.value||'Minecraft';
-  const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories?select=id,name&active=eq.true&order=sort_order.asc,name.asc',{headers:auth()});
-  if(!r.ok){
-    // Keep the built-in options as a fallback if the migration has not been run yet.
-    sel.innerHTML='<option value="Minecraft">Minecraft</option><option value="蛋仔">蛋仔</option>';
-    if(current)sel.value=current;
-    return;
-  }
-  const rows=await r.json();
-  const names=[];
-  for(const x of rows||[]) if(x?.name && !names.includes(x.name)) names.push(x.name);
-  for(const builtIn of ['Minecraft','蛋仔']) if(!names.includes(builtIn)) names.push(builtIn);
-  sel.innerHTML=names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
-  if(current && !names.includes(current)){
-    const opt=document.createElement('option');
-    opt.value=current; opt.textContent=current; sel.appendChild(opt);
-  }
-  sel.value=current;
-}
-
-async function addCompetitionCategory(){
-  const input=$('newCompetitionCategory');
-  const name=(input?.value||'').trim();
-  if(!name){msg('competitionCategoryMsg','請輸入新分類名稱。');return}
-  if(name.length>30){msg('competitionCategoryMsg','分類名稱最多 30 個字。');return}
-  if(['Minecraft','蛋仔'].includes(name)){
-    msg('competitionCategoryMsg','這個分類已經存在。');
-    $('competitionCategory').value=name;
-    return;
-  }
-  try{
-    const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories',{
-      method:'POST',
-      headers:{...auth(),Prefer:'return=representation'},
-      body:JSON.stringify({name,sort_order:100})
-    });
-    const d=await r.json().catch(()=>[]);
-    if(!r.ok)throw new Error(d.message||d.hint||('HTTP '+r.status));
-    input.value='';
-    await loadCompetitionCategories(name);
-    msg('competitionCategoryMsg','✅ 已新增分類「'+name+'」。');
-  }catch(e){
-    msg('competitionCategoryMsg','❌ '+(e instanceof Error?e.message:String(e)));
-  }
-}
-
 function clearCompetition(){
   if($('competitionId'))$('competitionId').value='';
   $('competitionName').value='';
-  $('competitionCategory').value=$('competitionCategory')?.options[0]?.value||'Minecraft';
+  $('competitionCategory').value='Minecraft';
   $('competitionDate').value='';
   $('competitionDescription').value='';
   $('competitionResults').innerHTML='';
@@ -227,6 +177,106 @@ function getCompetitionResults(){
     score:row.querySelector('.resultScore').value===''?null:Number(row.querySelector('.resultScore').value),
     prize:row.querySelector('.resultPrize').value.trim()||null
   })).filter(x=>x.player_name).sort((a,b)=>a.place-b.place);
+}
+
+async function competitionCategories(){
+  if(!$('competitionCategory')||!configured()||!localStorage.getItem('access_token'))return;
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories?select=id,name,is_default&order=is_default.desc,name.asc',{headers:auth()});
+    if(!r.ok)throw new Error('無法讀取分類 HTTP '+r.status);
+    const rows=await r.json();
+    const sel=$('competitionCategory');
+    const current=sel.value;
+    sel.innerHTML=rows.map(c=>'<option value="'+esc(c.name)+'">'+esc(c.name)+'</option>').join('');
+    if(current && rows.some(c=>c.name===current))sel.value=current;
+    else if(rows[0])sel.value=rows[0].name;
+
+    const box=$('competitionCategoryList');
+    if(box){
+      box.innerHTML=rows.map(c=>{
+        const safeId=esc(c.id);
+        const buttons=c.is_default
+          ? '<span class="sub">預設分類</span>'
+          : '<button type="button" class="btn secondary categoryEdit" data-cat-edit="'+safeId+'" data-cat-name="'+esc(c.name)+'">✏️ 修改</button> <button type="button" class="btn secondary categoryDelete" data-cat-del="'+safeId+'" data-cat-name="'+esc(c.name)+'">🗑️ 刪除</button>';
+        return '<article class="notice"><div class="date">'+(c.is_default?'⭐ ':'')+esc(c.name)+'</div>'+buttons+'</article>';
+      }).join('') || '<div class="empty">目前沒有分類。</div>';
+      box.querySelectorAll('[data-cat-edit]').forEach(b=>b.onclick=()=>editCompetitionCategory(b.dataset.catEdit,b.dataset.catName));
+      box.querySelectorAll('[data-cat-del]').forEach(b=>b.onclick=()=>deleteCompetitionCategory(b.dataset.catDel,b.dataset.catName));
+    }
+  }catch(e){
+    console.error('competitionCategories:',e);
+    msg('competitionMsg','❌ '+(e instanceof Error?e.message:String(e)));
+  }
+}
+async function addCompetitionCategory(){
+  const input=$('competitionCategoryNew');
+  const name=input?.value.trim()||'';
+  if(!name){alert('請輸入分類名稱。');return}
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories',{
+      method:'POST',
+      headers:{...auth(),Prefer:'return=representation'},
+      body:JSON.stringify({name,is_default:false})
+    });
+    const d=await r.json().catch(()=>[]);
+    if(!r.ok)throw new Error(d.message||d.hint||('HTTP '+r.status));
+    input.value='';
+    await competitionCategories();
+    $('competitionCategory').value=name;
+    msg('competitionMsg','✅ 已新增分類：'+name);
+  }catch(e){
+    alert('新增分類失敗：'+(e instanceof Error?e.message:String(e)));
+  }
+}
+async function editCompetitionCategory(id,currentName){
+  if(!id)return;
+  const next=prompt('請輸入新的分類名稱：',currentName||'');
+  if(next===null)return;
+  const name=next.trim();
+  if(!name){alert('分類名稱不能為空白。');return}
+  try{
+    const used=await fetch(SUPABASE_URL+'/rest/v1/competitions?select=id&category=eq.'+encodeURIComponent(currentName)+'&limit=1',{headers:auth()});
+    const usedRows=used.ok?await used.json():[];
+    const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories?id=eq.'+encodeURIComponent(id),{
+      method:'PATCH',
+      headers:{...auth(),Prefer:'return=representation'},
+      body:JSON.stringify({name})
+    });
+    const d=await r.json().catch(()=>[]);
+    if(!r.ok)throw new Error(d.message||d.hint||('HTTP '+r.status));
+    if(usedRows.length){
+      const u=await fetch(SUPABASE_URL+'/rest/v1/competitions?category=eq.'+encodeURIComponent(currentName),{
+        method:'PATCH',
+        headers:{...auth(),Prefer:'return=minimal'},
+        body:JSON.stringify({category:name})
+      });
+      if(!u.ok)throw new Error('分類名稱已更新，但舊比賽的分類同步失敗 HTTP '+u.status);
+    }
+    await competitionCategories();
+    $('competitionCategory').value=name;
+    msg('competitionMsg','✅ 分類已修改。');
+  }catch(e){alert('修改分類失敗：'+(e instanceof Error?e.message:String(e)));}
+}
+async function deleteCompetitionCategory(id,name){
+  if(!id)return;
+  if(!confirm('確定刪除分類「'+name+'」？'))return;
+  try{
+    const used=await fetch(SUPABASE_URL+'/rest/v1/competitions?select=id&category=eq.'+encodeURIComponent(name)+'&limit=1',{headers:auth()});
+    if(!used.ok)throw new Error('無法檢查分類是否正在使用 HTTP '+used.status);
+    const rows=await used.json();
+    if(rows.length){
+      alert('這個分類已有比賽使用，為避免歷屆資料失去分類，請先修改相關比賽的分類後再刪除。');
+      return;
+    }
+    const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories?id=eq.'+encodeURIComponent(id),{
+      method:'DELETE',
+      headers:auth()
+    });
+    const d=await r.json().catch(()=>[]);
+    if(!r.ok)throw new Error(d.message||d.hint||('HTTP '+r.status));
+    await competitionCategories();
+    msg('competitionMsg','✅ 已刪除分類：'+name);
+  }catch(e){alert('刪除分類失敗：'+(e instanceof Error?e.message:String(e)));}
 }
 async function saveCompetition(){
   const id=$('competitionId').value;
@@ -290,6 +340,7 @@ async function setCompetitionPublished(id,published){
   }catch(e){alert('更新公布狀態失敗：'+(e instanceof Error?e.message:String(e)))}
 }
 async function competitions(){
+  await competitionCategories();
   if(!$('adminCompetitions')||!configured()||!localStorage.getItem('access_token'))return;
   const r=await fetch(SUPABASE_URL+'/rest/v1/competitions?select=*&order=created_at.desc',{headers:auth()});
   const a=r.ok?await r.json():[];
@@ -307,5 +358,5 @@ async function deleteCompetition(id){
 }
 
 function logout(){localStorage.removeItem('access_token');localStorage.removeItem('refresh_token');location.reload()}
-function bind(){if($('loginButton'))$('loginButton').onclick=login;if($('logoutButton'))$('logoutButton').onclick=logout;if($('saveContent'))$('saveContent').onclick=save;if($('publishButton'))$('publishButton').onclick=publish;if($('saveProduct'))$('saveProduct').onclick=saveProduct;if($('clearProduct'))$('clearProduct').onclick=clearProduct;if($('createVisitor'))$('createVisitor').onclick=createVisitor;if($('setSharedVisitorPassword'))$('setSharedVisitorPassword').onclick=setSharedVisitorPassword;if($('createCoupon'))$('createCoupon').onclick=createCoupon;if($('addCompetitionResult'))$('addCompetitionResult').onclick=()=>addCompetitionResult();if($('addCompetitionCategory'))$('addCompetitionCategory').onclick=addCompetitionCategory;if($('saveCompetition'))$('saveCompetition').onclick=saveCompetition;if($('publishCompetition'))$('publishCompetition').onclick=async()=>{const ok=await saveCompetition();const id=$('competitionId').value;if(ok&&id)await setCompetitionPublished(id,true)};if($('unpublishCompetition'))$('unpublishCompetition').onclick=async()=>{const id=$('competitionId').value;if(id)await setCompetitionPublished(id,false)};if($('clearCompetition'))$('clearCompetition').onclick=clearCompetition;if($('saveQuickLink'))$('saveQuickLink').onclick=saveQuickLink;if($('clearQuickLink'))$('clearQuickLink').onclick=clearQuickLink;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabPanel').forEach(x=>x.classList.add('hidden'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));$(b.dataset.tab).classList.remove('hidden');b.classList.add('active');if(b.dataset.tab==='newsTab')news();if(b.dataset.tab==='productTab')products();if(b.dataset.tab==='visitorTab')visitors();if(b.dataset.tab==='couponTab')coupons();if(b.dataset.tab==='competitionTab'){loadCompetitionCategories();competitions();if(!$('competitionResults').children.length)addCompetitionResult()}if(b.dataset.tab==='quickLinkTab')quickLinks();if(b.dataset.tab==='supportTab')tickets()})}
+function bind(){if($('loginButton'))$('loginButton').onclick=login;if($('logoutButton'))$('logoutButton').onclick=logout;if($('saveContent'))$('saveContent').onclick=save;if($('publishButton'))$('publishButton').onclick=publish;if($('saveProduct'))$('saveProduct').onclick=saveProduct;if($('clearProduct'))$('clearProduct').onclick=clearProduct;if($('createVisitor'))$('createVisitor').onclick=createVisitor;if($('setSharedVisitorPassword'))$('setSharedVisitorPassword').onclick=setSharedVisitorPassword;if($('createCoupon'))$('createCoupon').onclick=createCoupon;if($('addCompetitionResult'))$('addCompetitionResult').onclick=()=>addCompetitionResult();if($('saveCompetition'))$('saveCompetition').onclick=saveCompetition;if($('publishCompetition'))$('publishCompetition').onclick=async()=>{const ok=await saveCompetition();const id=$('competitionId').value;if(ok&&id)await setCompetitionPublished(id,true)};if($('unpublishCompetition'))$('unpublishCompetition').onclick=async()=>{const id=$('competitionId').value;if(id)await setCompetitionPublished(id,false)};if($('clearCompetition'))$('clearCompetition').onclick=clearCompetition;if($('addCompetitionCategory'))$('addCompetitionCategory').onclick=addCompetitionCategory;if($('saveQuickLink'))$('saveQuickLink').onclick=saveQuickLink;if($('clearQuickLink'))$('clearQuickLink').onclick=clearQuickLink;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabPanel').forEach(x=>x.classList.add('hidden'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));$(b.dataset.tab).classList.remove('hidden');b.classList.add('active');if(b.dataset.tab==='newsTab')news();if(b.dataset.tab==='productTab')products();if(b.dataset.tab==='visitorTab')visitors();if(b.dataset.tab==='couponTab')coupons();if(b.dataset.tab==='competitionTab'){competitionCategories();competitions();if(!$('competitionResults').children.length)addCompetitionResult()}if(b.dataset.tab==='quickLinkTab')quickLinks();if(b.dataset.tab==='supportTab')tickets()})}
 document.addEventListener('DOMContentLoaded',()=>{bind();if(localStorage.getItem('access_token')){$('login').classList.add('hidden');$('dashboard').classList.remove('hidden');load()}else if(!configured())msg('loginError','請把你原本可用的 config.js 放回來。')});

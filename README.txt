@@ -71,3 +71,6 @@ Access-Control-Allow-Headers: authorization, x-client-info, apikey, content-type
 - 快速連結管理保留
 
 本版依最新需求取消表單功能；已移除表單前台、後台與表單 SQL 區塊。保留快速連結、公告連結、達人榜發布、訪客刪除與前台更多功能下拉選單。
+
+
+本次修改：達人榜分類管理新增「新增／修改／刪除」。預設 Minecraft、蛋仔保留；已被比賽使用的自訂分類不允許直接刪除，避免歷屆成績失去分類。
