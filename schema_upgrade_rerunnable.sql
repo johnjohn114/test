@@ -163,9 +163,7 @@ create table if not exists public.competitions (
 create table if not exists public.competition_categories (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
-  is_default boolean not null default false,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  created_at timestamptz not null default now()
 );
 
 alter table public.competition_categories enable row level security;
@@ -175,16 +173,16 @@ create policy competition_categories_admin_all on public.competition_categories
   using (public.is_admin())
   with check (public.is_admin());
 
-insert into public.competition_categories(name,is_default)
-values ('Minecraft',true),('蛋仔',true)
-on conflict (name) do update set is_default=excluded.is_default;
+insert into public.competition_categories(name)
+values ('Minecraft'),('蛋仔')
+on conflict (name) do nothing;
 
 -- 既有 competitions 以前有固定 CHECK；移除後才能使用自訂分類。
 alter table public.competitions drop constraint if exists competitions_category_check;
 
 -- 將既有比賽中的非預設分類補進分類表。
-insert into public.competition_categories(name,is_default)
-select distinct category,false
+insert into public.competition_categories(name)
+select distinct category
 from public.competitions
 where category is not null
 on conflict (name) do nothing;

@@ -182,7 +182,7 @@ function getCompetitionResults(){
 async function competitionCategories(){
   if(!$('competitionCategory')||!configured()||!localStorage.getItem('access_token'))return;
   try{
-    const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories?select=id,name,is_default&order=is_default.desc,name.asc',{headers:auth()});
+    const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories?select=id,name&order=name.asc',{headers:auth()});
     if(!r.ok)throw new Error('無法讀取分類 HTTP '+r.status);
     const rows=await r.json();
     const sel=$('competitionCategory');
@@ -195,10 +195,8 @@ async function competitionCategories(){
     if(box){
       box.innerHTML=rows.map(c=>{
         const safeId=esc(c.id);
-        const buttons=c.is_default
-          ? '<span class="sub">預設分類</span>'
-          : '<button type="button" class="btn secondary categoryEdit" data-cat-edit="'+safeId+'" data-cat-name="'+esc(c.name)+'">✏️ 修改</button> <button type="button" class="btn secondary categoryDelete" data-cat-del="'+safeId+'" data-cat-name="'+esc(c.name)+'">🗑️ 刪除</button>';
-        return '<article class="notice"><div class="date">'+(c.is_default?'⭐ ':'')+esc(c.name)+'</div>'+buttons+'</article>';
+        const buttons=(c.name==='Minecraft'||c.name==='蛋仔') ? '<span class="sub">預設分類</span>' : '<button type="button" class="btn secondary categoryEdit" data-cat-edit="'+safeId+'" data-cat-name="'+esc(c.name)+'">✏️ 修改</button> <button type="button" class="btn secondary categoryDelete" data-cat-del="'+safeId+'" data-cat-name="'+esc(c.name)+'">🗑️ 刪除</button>';
+        return '<article class="notice"><div class="date">'+(false?'⭐ ':'')+esc(c.name)+'</div>'+buttons+'</article>';
       }).join('') || '<div class="empty">目前沒有分類。</div>';
       box.querySelectorAll('[data-cat-edit]').forEach(b=>b.onclick=()=>editCompetitionCategory(b.dataset.catEdit,b.dataset.catName));
       box.querySelectorAll('[data-cat-del]').forEach(b=>b.onclick=()=>deleteCompetitionCategory(b.dataset.catDel,b.dataset.catName));
@@ -216,7 +214,7 @@ async function addCompetitionCategory(){
     const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories',{
       method:'POST',
       headers:{...auth(),Prefer:'return=representation'},
-      body:JSON.stringify({name,is_default:false})
+      body:JSON.stringify({name})
     });
     const d=await r.json().catch(()=>[]);
     if(!r.ok)throw new Error(d.message||d.hint||('HTTP '+r.status));
