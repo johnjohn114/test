@@ -1,7 +1,7 @@
 <!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>管理後台</title><link rel="stylesheet" href="style.css"></head><body class="adminPage">
 <div id="login" class="gate"><div class="gate-card"><div class="lock">👑</div><h1>管理員登入</h1><p>管理公告、商品、訪客與客服</p><input id="email" type="email" placeholder="管理員 Email"><input id="password" type="password" placeholder="管理員密碼"><button id="loginButton">登入後台</button><small id="loginError"></small><a href="index.html">← 返回網站</a></div></div>
 <div id="dashboard" class="dashboard hidden"><header><div class="nav"><div class="logo">👑 網站管理後台</div><nav><a href="index.html">查看網站</a><button id="logoutButton">登出</button></nav></div></header><main><section>
-<div class="adminTabs"><button class="tab active" data-tab="contentTab">🎨 網站內容</button><button class="tab" data-tab="newsTab">📢 公告管理</button><button class="tab" data-tab="productTab">📦 商品管理</button><button class="tab" data-tab="visitorTab">👥 訪客帳號</button><button class="tab" data-tab="couponTab">🎟️ 優惠券</button><button class="tab" data-tab="competitionTab">🏆 達人榜</button><button class="tab" data-tab="quickLinkTab">🔗 快速連結</button><button class="tab" data-tab="supportTab">💬 客服中心</button></div>
+<div class="adminTabs"><button class="tab active" data-tab="contentTab">🎨 網站內容</button><button class="tab" data-tab="newsTab">📢 公告管理</button><button class="tab" data-tab="productTab">📦 商品管理</button><button class="tab" data-tab="visitorTab">👥 訪客帳號</button><button class="tab" data-tab="notificationTab">🔔 通知管理</button><button class="tab" data-tab="couponTab">🎟️ 優惠券</button><button class="tab" data-tab="competitionTab">🏆 達人榜</button><button class="tab" data-tab="quickLinkTab">🔗 快速連結</button><button class="tab" data-tab="supportTab">💬 客服中心</button></div>
 <div id="contentTab" class="tabPanel"><h2>🎨 網站內容</h2><p class="sub">修改後按儲存，訪客網站就會更新。</p><div class="editor">
 <label>網站名稱<input id="site_name"></label><label>首頁標題<input id="hero_title"></label><label>首頁介紹<textarea id="hero_text" rows="3"></textarea></label><label>主視覺圖片網址<input id="hero_image"></label><label>關於我們標題<input id="about_title"></label><label>關於我們副標題<input id="about_subtitle"></label><label>我們是誰：標題<input id="about1_title"></label><label>我們是誰：內容<textarea id="about1_text" rows="3"></textarea></label><label>我們的特色：標題<input id="about2_title"></label><label>我們的特色：內容<textarea id="about2_text" rows="3"></textarea></label><label>網站特色主標題<input id="features_title"></label><label>網站特色副標題<input id="features_subtitle"></label><div class="four"><div><label>特色 1 標題<input id="f1_title"></label><label>內容<textarea id="f1_text" rows="3"></textarea></label></div><div><label>特色 2 標題<input id="f2_title"></label><label>內容<textarea id="f2_text" rows="3"></textarea></label></div><div><label>特色 3 標題<input id="f3_title"></label><label>內容<textarea id="f3_text" rows="3"></textarea></label></div><div><label>特色 4 標題<input id="f4_title"></label><label>內容<textarea id="f4_text" rows="3"></textarea></label></div></div><label>Email<input id="contact1"></label><label>社群<input id="contact2"></label><label>其他聯絡方式<input id="contact3"></label><button class="btn" id="saveContent">💾 儲存網站內容</button><small id="contentMsg"></small></div></div>
 <div id="newsTab" class="tabPanel hidden"><h2>📢 公告管理</h2><div class="editor"><label>公告標題<input id="title"></label><label>分類<select id="category"><option>最新消息</option><option>活動</option><option>蛋仔</option><option>Minecraft伺服器更新</option></select></label><label>發布日期／時間<input id="published_at" type="datetime-local"></label><label class="check"><input id="pinned" type="checkbox"> 📌 置頂公告</label><label>公告內容<textarea id="content" rows="8"></textarea></label><label>公告連結網址<input id="linkUrl" type="url" placeholder="https://... 或 /page.html"></label><label>連結按鈕文字<input id="linkLabel" placeholder="例如：查看活動詳情"></label><button class="btn" id="publishButton">＋ 儲存公告</button><small id="publishMsg"></small></div><h2 style="margin-top:40px">公告列表</h2><div id="adminList" class="newsList"></div></div>
@@ -13,16 +13,7 @@
 <div class="editor">
 <input id="competitionId" type="hidden">
 <label>比賽名稱<input id="competitionName" placeholder="例如：Minecraft 建築大賽 #1"></label>
-<label>分類<select id="competitionCategory"></select></label>
-<div id="competitionCategoryManager" style="display:block!important;margin:14px 0 20px;padding:18px;border:2px solid #8b63d9;border-radius:16px;background:#fbf8ff;">
-  <strong>分類管理</strong>
-  <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
-    <input id="competitionCategoryNew" type="text" placeholder="輸入新分類，例如：Roblox" style="flex:1;min-width:220px;">
-    <button type="button" class="btn secondary" id="addCompetitionCategory">＋ 新增分類</button>
-  </div>
-  <div id="competitionCategoryList" style="margin-top:10px;"></div>
-  <small style="display:block;margin-top:8px;opacity:.75;">Minecraft、蛋仔為預設分類；已有比賽使用中的分類不能直接刪除。</small>
-</div>
+<label>分類<select id="competitionCategory"><option value="Minecraft">Minecraft</option><option value="蛋仔">蛋仔</option></select></label>
 <label>比賽日期<input id="competitionDate" type="date"></label>
 <label>比賽說明<textarea id="competitionDescription" rows="4" placeholder="比賽規則、主題或其他說明"></textarea></label>
 <div class="resultEditor">
@@ -62,5 +53,5 @@
   </div>
 </div>
 </div>
-<div id="supportTab" class="tabPanel hidden"><h2>💬 客服中心</h2><div id="ticketList" class="newsList"></div></div>
-</section></main></div><script src="config.js"></script><script src="admin.js?v=category-manager-v3"></script></body></html>
+<div id="notificationTab" class="tabPanel hidden"><h2>🔔 通知管理</h2><p class="sub">可發送給單一會員或全部會員；通知會出現在「我的 → 我的通知」。</p><div class="editor"><label>通知標題<input id="notificationTitle"></label><label>通知類型<input id="notificationType" placeholder="例如：系統、比賽、優惠"></label><label>通知內容<textarea id="notificationContent" rows="5"></textarea></label><label>發送給<select id="notificationUser"></select></label><button class="btn" id="createNotification">🔔 發送通知</button><small id="notificationMsg"></small></div><h2 style="margin-top:40px">通知紀錄</h2><div id="adminNotifications" class="newsList"></div></div><div id="supportTab" class="tabPanel hidden"><h2>💬 客服中心</h2><div id="ticketList" class="newsList"></div></div>
+</section></main></div><script src="config.js"></script><script src="admin.js?v=all-features-v1"></script></body></html>

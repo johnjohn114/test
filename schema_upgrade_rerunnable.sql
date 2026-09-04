@@ -275,3 +275,122 @@ for all to public using (is_admin()) with check (is_admin());
 
 
 create index if not exists competition_categories_name_idx on public.competition_categories(name);
+
+
+-- 「我的」會員中心升級：會員編號、暱稱、通知，以及比賽成績綁定會員
+alter table public.profiles add column if not exists nickname text;
+alter table public.profiles add column if not exists member_no integer;
+create unique index if not exists profiles_member_no_uidx on public.profiles(member_no) where member_no is not null;
+
+create sequence if not exists public.member_no_seq;
+-- 序號只會向前，不因刪除會員而重用。
+do $$
+declare
+  mx bigint;
+  lv bigint;
+  called boolean;
+begin
+  select coalesce(max(member_no),0) into mx from public.profiles;
+  select last_value, is_called into lv, called from public.member_no_seq;
+  if mx = 0 and not called then
+    perform setval('public.member_no_seq', 1, false);
+  elsif mx > 0 and (lv < mx or (lv = mx and not called)) then
+    perform setval('public.member_no_seq', mx, true);
+  end if;
+end $$;
+
+create or replace function public.assign_member_no_and_nickname()
+returns trigger
+language plpgsql
+security definer
+set search_path=public,auth
+as $$
+declare
+  mail text;
+begin
+  if NEW.role = 'visitor' then
+    if NEW.member_no is null then
+      NEW.member_no := nextval('public.member_no_seq');
+    end if;
+    if nullif(trim(coalesce(NEW.nickname,'')),'') is null then
+      select email into mail from auth.users where id=NEW.id;
+      NEW.nickname := coalesce(nullif(split_part(coalesce(mail,''),'@',1),''),'會員');
+    end if;
+  end if;
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trg_profiles_member_no on public.profiles;
+create trigger trg_profiles_member_no
+before insert on public.profiles
+for each row execute function public.assign_member_no_and_nickname();
+
+-- 補齊既有訪客會員編號與暱稱；編號一旦產生不會因刪除而回收。
+do $$
+declare
+  r record;
+begin
+  for r in
+    select p.id, u.email
+    from public.profiles p
+    join auth.users u on u.id=p.id
+    where p.role='visitor' and p.member_no is null
+    order by p.created_at, p.id
+  loop
+    update public.profiles
+      set member_no=nextval('public.member_no_seq'),
+          nickname=coalesce(nullif(trim(nickname),''), split_part(coalesce(r.email,''),'@',1), '會員')
+    where id=r.id;
+  end loop;
+end $$;
+
+update public.profiles p
+set nickname=coalesce(nullif(trim(p.nickname),''), split_part(coalesce(u.email,''),'@',1), '會員')
+from auth.users u
+where p.id=u.id and p.role='visitor' and nullif(trim(coalesce(p.nickname,'')),'') is null;
+
+alter table public.profiles enable row level security;
+drop policy if exists profile_self_update on public.profiles;
+create policy profile_self_update on public.profiles
+for update to authenticated
+using(id=auth.uid())
+with check(id=auth.uid() and role='visitor');
+
+-- 比賽成績可選擇綁定會員；既有資料維持可用。
+alter table public.competition_results add column if not exists user_id uuid references auth.users(id) on delete set null;
+create index if not exists competition_results_user_idx on public.competition_results(user_id);
+drop policy if exists competition_result_public_read on public.competition_results;
+create policy competition_result_public_read on public.competition_results
+for select using(
+  public.is_admin() or user_id=auth.uid() or exists(
+    select 1 from public.competitions c
+    where c.id=competition_results.competition_id
+      and c.published=true
+      and (c.published_at is null or c.published_at<=now())
+  )
+);
+
+-- 我的通知
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
+  title text not null,
+  content text not null,
+  type text not null default '一般',
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table public.notifications add column if not exists type text not null default '一般';
+alter table public.notifications add column if not exists read_at timestamptz;
+alter table public.notifications enable row level security;
+drop policy if exists notification_owner_read on public.notifications;
+drop policy if exists notification_owner_update on public.notifications;
+drop policy if exists notification_admin_all on public.notifications;
+create policy notification_owner_read on public.notifications
+for select to authenticated using(user_id=auth.uid() or public.is_admin());
+create policy notification_owner_update on public.notifications
+for update to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
+create policy notification_admin_all on public.notifications
+for all to authenticated using(public.is_admin()) with check(public.is_admin());
+create index if not exists notifications_user_idx on public.notifications(user_id, created_at desc);
