@@ -241,3 +241,26 @@ footer{text-align:center;padding:45px 20px;background:#5f4b82;color:#fff;margin-
 @media(max-width:600px){.memberOverviewGrid{grid-template-columns:1fr}.memberOverviewCard{padding:16px}.overviewQuick{align-items:flex-start;flex-direction:column}.overviewQuick button{width:100%;text-align:left}}
 
 .notificationTicketBtn{margin-right:8px;margin-top:8px}.notificationTicketBtn+.markRead{margin-top:8px}
+
+
+/* 彈窗公告 */
+body.popupOpen{overflow:hidden}
+.announcementPopup{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px}
+.announcementPopupBackdrop{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.announcementPopupDialog{position:relative;width:min(620px,100%);max-height:min(82vh,760px);overflow:auto;background:#fff;border-radius:22px;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,.28);text-align:left}
+.announcementPopupIcon{font-size:42px;text-align:center;margin-bottom:4px}
+.announcementPopupDate{text-align:center;font-size:14px;font-weight:700;opacity:.7;margin-bottom:8px}
+.announcementPopupDialog h2{margin:0 0 18px;text-align:center}
+.announcementPopupContent{line-height:1.9;white-space:normal;word-break:break-word;margin-bottom:20px}
+.announcementPopupConfirm{display:block;width:100%;font-size:16px;margin-top:20px}
+@media(max-width:600px){.announcementPopup{padding:12px}.announcementPopupDialog{padding:22px;border-radius:18px;max-height:88vh}.announcementPopupIcon{font-size:36px}.announcementPopupDialog h2{font-size:21px}}
+
+
+/* Popup announcement admin settings v2 */
+.popupSettingsBox{margin:14px 0;padding:16px;border:2px solid #2563eb;border-radius:12px;background:#eff6ff}
+.popupSettingsTitle{font-size:18px;font-weight:700;margin-bottom:10px}
+.popupEnableRow{font-size:16px;padding:10px 12px;border-radius:8px;background:#fff}
+.popupEnableRow input{width:auto}
+.popupHint{margin:8px 0 12px;font-size:13px;line-height:1.6;color:#475569}
+.popupSettingsBox label{display:block;margin-top:10px}
+@media (max-width:600px){.popupSettingsBox{padding:12px}.popupSettingsTitle{font-size:17px}}

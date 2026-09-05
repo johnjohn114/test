@@ -40,7 +40,51 @@ function bindMobileNav(){
   }));
 }
 function show(id,msg){const e=$(id);if(e)e.textContent=msg;}
-async function loadSite(){if(!configured())return;try{const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY};const s=await fetch(SUPABASE_URL+'/rest/v1/site_settings?select=*&id=eq.1',{headers:h});if(s.ok){const a=await s.json();if(a[0])apply(a[0])}const n=await fetch(SUPABASE_URL+'/rest/v1/announcements?select=*&published=eq.true&published_at=lte.'+encodeURIComponent(new Date().toISOString())+'&order=pinned.desc,published_at.desc,created_at.desc&limit=3',{headers:h});if(n.ok){const rows=await n.json();$('newsList')&&($('newsList').innerHTML=rows.length?rows.map(card).join(''):'<div class="empty">目前還沒有公告。</div>')}}catch(e){console.error(e);$('newsList')&&($('newsList').innerHTML='<div class="empty">目前無法載入公告。</div>')}}
+let __popupAnnouncements=[];
+function popupStorageKey(id){return 'announcement_popup_read_'+id}
+async function loadPopupAnnouncement(){
+  if(!configured())return;
+  try{
+    const now=new Date().toISOString();
+    const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY};
+    const url=SUPABASE_URL+'/rest/v1/announcements?select=id,title,content,link_url,link_label,popup_mode,popup_start_at,popup_end_at,published_at&published=eq.true&popup_enabled=eq.true&popup_start_at=lte.'+encodeURIComponent(now)+'&or=(popup_end_at.is.null,popup_end_at.gte.'+encodeURIComponent(now)+')&order=pinned.desc,published_at.desc,created_at.desc&limit=5';
+    const r=await fetch(url,{headers:h});
+    if(!r.ok)return;
+    const rows=await r.json();
+    if(!rows.length)return;
+    const uid=(await getCurrentUser())?.id||null;
+    let readIds=new Set();
+    if(uid){
+      const rr=await fetch(SUPABASE_URL+'/rest/v1/announcement_reads?user_id=eq.'+encodeURIComponent(uid)+'&announcement_id=in.('+rows.map(x=>encodeURIComponent(x.id)).join(',')+')&select=announcement_id',{headers:auth()});
+      if(rr.ok)(await rr.json()).forEach(x=>readIds.add(x.announcement_id));
+    }
+    const candidate=rows.find(x=>{
+      if(x.popup_mode==='once') return !readIds.has(x.id) && localStorage.getItem(popupStorageKey(x.id))!=='1';
+      return sessionStorage.getItem(popupStorageKey(x.id))!=='1';
+    });
+    if(candidate)showPopupAnnouncement(candidate);
+  }catch(e){console.warn('彈窗公告載入失敗:',e)}
+}
+function showPopupAnnouncement(x){
+  document.getElementById('announcementPopup')?.remove();
+  const wrap=document.createElement('div');wrap.id='announcementPopup';wrap.className='announcementPopup';
+  wrap.innerHTML='<div class="announcementPopupBackdrop" data-popup-close></div><div class="announcementPopupDialog" role="dialog" aria-modal="true" aria-labelledby="announcementPopupTitle"><div class="announcementPopupIcon">📢</div><div class="announcementPopupDate">重要公告</div><h2 id="announcementPopupTitle">'+esc(x.title)+'</h2><div class="announcementPopupContent">'+esc(x.content).replace(/\n/g,'<br>')+'</div>'+(x.link_url?'<p><a class="btn secondary" href="'+esc(x.link_url)+'" target="_blank" rel="noopener noreferrer">🔗 '+esc(x.link_label||'查看詳情')+'</a></p>':'')+'<button class="btn announcementPopupConfirm" type="button" id="announcementPopupConfirm">✓ 我已閱讀</button></div>';
+  document.body.appendChild(wrap);
+  document.body.classList.add('popupOpen');
+  const close=async()=>{
+    if(x.popup_mode==='once'){
+      localStorage.setItem(popupStorageKey(x.id),'1');
+      const uid=(await getCurrentUser())?.id;
+      if(uid){
+        await fetch(SUPABASE_URL+'/rest/v1/announcement_reads',{method:'POST',headers:{...auth(),Prefer:'resolution=ignore-duplicates'},body:JSON.stringify({announcement_id:x.id,user_id:uid})}).catch(()=>{});
+      }
+    }else sessionStorage.setItem(popupStorageKey(x.id),'1');
+    wrap.remove();document.body.classList.remove('popupOpen');
+  };
+  $('announcementPopupConfirm')?.addEventListener('click',close);
+  document.addEventListener('keydown',function escPopup(e){if(e.key==='Escape'){close();document.removeEventListener('keydown',escPopup)}});
+}
+async function loadSite(){if(!configured())return;try{const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY};const s=await fetch(SUPABASE_URL+'/rest/v1/site_settings?select=*&id=eq.1',{headers:h});if(s.ok){const a=await s.json();if(a[0])apply(a[0])}const n=await fetch(SUPABASE_URL+'/rest/v1/announcements?select=*&published=eq.true&published_at=lte.'+encodeURIComponent(new Date().toISOString())+'&order=pinned.desc,published_at.desc,created_at.desc&limit=3',{headers:h});if(n.ok){const rows=await n.json();$('newsList')&&($('newsList').innerHTML=rows.length?rows.map(card).join(''):'<div class="empty">目前還沒有公告。</div>')}await loadPopupAnnouncement()}catch(e){console.error(e);$('newsList')&&($('newsList').innerHTML='<div class="empty">目前無法載入公告。</div>')}}
 function card(x){
   const link=x.link_url?'<p><a class="btn secondary" href="'+esc(x.link_url)+'" target="_blank" rel="noopener noreferrer">🔗 '+esc(x.link_label||'查看連結')+'</a></p>':'';
   return '<article class="notice"><div class="date">'+(x.pinned?'📌 ':'')+esc(x.date||String(x.published_at||'').slice(0,10))+' · '+esc(x.category||'最新消息')+'</div><h3>'+esc(x.title)+'</h3><p>'+esc(x.content).replace(/\n/g,'<br>')+'</p>'+link+'</article>';
@@ -530,5 +574,5 @@ function initSiteSearch(){
 
 function showMySection(id){document.querySelectorAll('.myPanel').forEach(x=>x.classList.add('hidden'));$(id)?.classList.remove('hidden');document.querySelectorAll('.mySubnav a').forEach(a=>a.classList.toggle('active',a.dataset.target===id));if(id==='myOverviewPanel')loadMyOverview();}
 
-window.addEventListener('DOMContentLoaded',async()=>{bindMobileNav();initSiteSearch();if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;const sessionOk=await ensureVisitorSession();if(sessionOk){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if(sessionOk)loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&sessionOk)loadMyCoupons();loadQuickLinks();loadCompetitionMenu();loadNotificationBadge();if($('competitionList'))loadCompetitionPage();if($('myProfile')&&sessionOk){loadMyProfile();loadMyCompetitions();loadMyAwards();loadMyNotifications();$('saveMyProfile')?.addEventListener('click',saveMyProfile);$('changeMyPassword')?.addEventListener('click',changeMyPassword);$('markAllNotifications')?.addEventListener('click',markAllNotificationsRead);$('deleteReadNotifications')?.addEventListener('click',deleteReadNotifications);showMySection(location.hash?location.hash.slice(1):'myProfilePanel');document.querySelectorAll('.mySubnav a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const target=a.dataset.target;history.replaceState(null,'','#'+target);showMySection(target);}));} });
+window.addEventListener('DOMContentLoaded',async()=>{bindMobileNav();initSiteSearch();if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;const sessionOk=await ensureVisitorSession();if(sessionOk){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;loadSite();if($('myCoupons')&&sessionOk)loadMyCoupons();loadQuickLinks();loadCompetitionMenu();loadNotificationBadge();if($('competitionList'))loadCompetitionPage();if($('myProfile')&&sessionOk){loadMyProfile();loadMyCompetitions();loadMyAwards();loadMyNotifications();$('saveMyProfile')?.addEventListener('click',saveMyProfile);$('changeMyPassword')?.addEventListener('click',changeMyPassword);$('markAllNotifications')?.addEventListener('click',markAllNotificationsRead);$('deleteReadNotifications')?.addEventListener('click',deleteReadNotifications);showMySection(location.hash?location.hash.slice(1):'myProfilePanel');document.querySelectorAll('.mySubnav a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const target=a.dataset.target;history.replaceState(null,'','#'+target);showMySection(target);}));} });
 window.addEventListener('hashchange',()=>{const id=location.hash.slice(1);if(id&&$(id))showMySection(id);});

@@ -39,6 +39,27 @@ alter table public.announcements add column if not exists published_at timestamp
 alter table public.announcements add column if not exists updated_at timestamptz not null default now();
 alter table public.announcements add column if not exists link_url text;
 alter table public.announcements add column if not exists link_label text;
+alter table public.announcements add column if not exists popup_enabled boolean not null default false;
+alter table public.announcements add column if not exists popup_mode text not null default 'once';
+alter table public.announcements add column if not exists popup_start_at timestamptz;
+alter table public.announcements add column if not exists popup_end_at timestamptz;
+update public.announcements set popup_start_at=published_at where popup_start_at is null and popup_enabled=true;
+alter table public.announcements drop constraint if exists announcements_popup_mode_check;
+alter table public.announcements add constraint announcements_popup_mode_check check (popup_mode in ('once','every_visit'));
+
+create table if not exists public.announcement_reads (
+  announcement_id uuid not null references public.announcements(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  read_at timestamptz not null default now(),
+  primary key (announcement_id,user_id)
+);
+alter table public.announcement_reads enable row level security;
+drop policy if exists announcement_read_owner_select on public.announcement_reads;
+drop policy if exists announcement_read_owner_insert on public.announcement_reads;
+create policy announcement_read_owner_select on public.announcement_reads for select to authenticated using(user_id=auth.uid() or public.is_admin());
+create policy announcement_read_owner_insert on public.announcement_reads for insert to authenticated with check(user_id=auth.uid());
+create index if not exists announcement_reads_user_idx on public.announcement_reads(user_id);
+
 
 -- 商品
 create table if not exists public.products (
