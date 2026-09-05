@@ -355,6 +355,36 @@ async function loadCompetitionPage(){
 
 
 
+async function loadMyOverview(){
+  if(!$('myOverviewPanel')||!visitorToken()||!configured())return;
+  const uid=(await getCurrentUser())?.id;if(!uid)return;
+  const h=auth();
+  try{
+    const [regR,notR,couponR,ticketR]=await Promise.all([
+      fetch(SUPABASE_URL+'/rest/v1/competition_registrations?select=id,status&user_id=eq.'+encodeURIComponent(uid)+'&status=in.(active,pending,approved)',{headers:h}),
+      fetch(SUPABASE_URL+'/rest/v1/notifications?select=id&user_id=eq.'+encodeURIComponent(uid)+'&read_at=is.null',{headers:h}),
+      fetch(SUPABASE_URL+'/rest/v1/coupons?select=id,used,expires_at&order=created_at.desc',{headers:h}),
+      fetch(SUPABASE_URL+'/rest/v1/support_tickets?select=id,status&order=created_at.desc',{headers:h})
+    ]);
+    const regs=regR.ok?await regR.json():[];
+    const unread=notR.ok?await notR.json():[];
+    const coupons=couponR.ok?await couponR.json():[];
+    const tickets=ticketR.ok?await ticketR.json():[];
+    const now=Date.now();
+    const usableCoupons=coupons.filter(c=>!c.used&&(!c.expires_at||new Date(c.expires_at).getTime()>=now));
+    const openTickets=tickets.filter(t=>t.status!=='closed');
+    $('overviewCompetitionCount').textContent=regs.length;
+    $('overviewCompetitionText').textContent=regs.length?'有 '+regs.length+' 個進行中的報名':'目前沒有進行中的報名';
+    $('overviewUnreadCount').textContent=unread.length;
+    $('overviewNotificationText').textContent=unread.length?'有新的通知':'目前沒有未讀通知';
+    $('overviewCouponCount').textContent=usableCoupons.length;
+    $('overviewCouponText').textContent=usableCoupons.length?'張優惠券可以使用':'目前沒有可用優惠券';
+    $('overviewSupportCount').textContent=openTickets.length;
+    $('overviewSupportText').textContent=openTickets.length?'個客服案件處理中':'目前沒有待處理案件';
+  }catch(e){
+    console.error('會員中心總覽載入失敗:',e);
+  }
+}
 async function loadMyProfile(){
   const box=$('myProfile'); if(!box||!visitorToken()) return;
   const u=await getCurrentUser(); if(!u) return;
@@ -485,7 +515,7 @@ function initSiteSearch(){
   if(input.value.trim())runSiteSearch();
 }
 
-function showMySection(id){document.querySelectorAll('.myPanel').forEach(x=>x.classList.add('hidden'));$(id)?.classList.remove('hidden');document.querySelectorAll('.mySubnav a').forEach(a=>a.classList.toggle('active',a.dataset.target===id));}
+function showMySection(id){document.querySelectorAll('.myPanel').forEach(x=>x.classList.add('hidden'));$(id)?.classList.remove('hidden');document.querySelectorAll('.mySubnav a').forEach(a=>a.classList.toggle('active',a.dataset.target===id));if(id==='myOverviewPanel')loadMyOverview();}
 
 window.addEventListener('DOMContentLoaded',async()=>{bindMobileNav();initSiteSearch();if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;const sessionOk=await ensureVisitorSession();if(sessionOk){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if(sessionOk)loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&sessionOk)loadMyCoupons();loadQuickLinks();loadCompetitionMenu();loadNotificationBadge();if($('competitionList'))loadCompetitionPage();if($('myProfile')&&sessionOk){loadMyProfile();loadMyCompetitions();loadMyAwards();loadMyNotifications();$('saveMyProfile')?.addEventListener('click',saveMyProfile);$('changeMyPassword')?.addEventListener('click',changeMyPassword);$('markAllNotifications')?.addEventListener('click',markAllNotificationsRead);$('deleteReadNotifications')?.addEventListener('click',deleteReadNotifications);showMySection(location.hash?location.hash.slice(1):'myProfilePanel');document.querySelectorAll('.mySubnav a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const target=a.dataset.target;history.replaceState(null,'','#'+target);showMySection(target);}));} });
 window.addEventListener('hashchange',()=>{const id=location.hash.slice(1);if(id&&$(id))showMySection(id);});
