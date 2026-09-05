@@ -248,48 +248,56 @@ async function loadRegistrationProfile(){
   const p=(r.ok?(await r.json()):[])[0]||{};
   return {id:u.id,email:u.email||'',nickname:p.nickname||'',member_no:p.member_no};
 }
+function registrationStatusText(status){return {active:'已報名',pending:'待審核',approved:'已通過',rejected:'未通過',cancelled:'已取消'}[status]||'未報名'}
+function registrationStatusIcon(status){return {active:'🟢',pending:'🟡',approved:'🟢',rejected:'🔴',cancelled:'⚪'}[status]||'📝'}
+function registrationDeadlineText(c){if(!c.registration_deadline)return '';const d=new Date(c.registration_deadline);if(Number.isNaN(d.getTime()))return '';return ' · 報名截止：'+d.toLocaleString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}
 function registrationForm(c,reg,profile){
-  const status=reg?.status||'未報名';
-  const disabled=reg&&reg.status==='active';
-  return '<div class="registrationBox" data-registration-box="'+esc(c.id)+'"><div class="registrationStatus">📝 報名狀態：<b>'+esc(status==='active'?'已報名':status==='cancelled'?'已取消':'未報名')+'</b></div>'+
-    (disabled?'<p class="sub">已完成報名。如需更改資料，可按「修改報名」。</p>':'<p class="sub">登入會員可直接報名，會員基本資料會自動帶入。</p>')+
-    '<div class="registrationForm"><label>會員編號<input value="'+esc(profile?.member_no!=null?String(profile.member_no).padStart(3,'0'):'—')+'" readonly></label><label>暱稱<input data-reg-nickname value="'+esc(reg?.nickname||profile?.nickname||'')+'" maxlength="40"></label><label>Email<input value="'+esc(reg?.email||profile?.email||'')+'" readonly></label><label>備註／補充說明<textarea data-reg-note maxlength="1000" rows="3">'+esc(reg?.note||'')+'</textarea></label></div><div class="competitionActions">'+(disabled?'<button class="btn secondary" data-reg-edit="'+esc(c.id)+'">✏️ 修改報名</button><button class="btn secondary" data-reg-cancel="'+esc(c.id)+'">❌ 取消報名</button>':'<button class="btn" data-reg-submit="'+esc(c.id)+'">📝 '+(reg?.status==='cancelled'?'重新報名':'我要報名')+'</button>')+'</div><small data-reg-msg></small></div>';
+  const status=reg?.status||'未報名'; const active=['active','pending','approved'].includes(status);
+  const deadlinePassed=c.registration_deadline && Date.now()>new Date(c.registration_deadline).getTime();
+  const fields=Array.isArray(c.registration_fields)?c.registration_fields:[];
+  const custom=reg?.custom_fields||{};
+  const fieldHtml=fields.map((name,i)=>'<label>'+esc(name)+'<input data-reg-field="'+esc(String(i))+'" data-field-name="'+esc(name)+'" value="'+esc(custom[name]||'')+'" maxlength="200" '+(active?'disabled':'')+'></label>').join('');
+  let actions='';
+  if(active) actions='<button class="btn secondary" data-reg-edit="'+esc(c.id)+'">✏️ 修改報名</button><button class="btn secondary" data-reg-cancel="'+esc(c.id)+'">❌ 取消報名</button>';
+  else if(!deadlinePassed) actions='<button class="btn" data-reg-submit="'+esc(c.id)+'">📝 '+(status==='cancelled'?'重新報名':status==='rejected'?'重新申請':'我要報名')+'</button>';
+  else actions='<span class="sub">⛔ 報名已截止</span>';
+  return '<div class="registrationBox" data-registration-box="'+esc(c.id)+'"><div class="registrationStatus">'+registrationStatusIcon(status)+' 報名狀態：<b>'+esc(registrationStatusText(status))+'</b>'+registrationDeadlineText(c)+(c.registration_capacity?' · 名額上限：'+esc(c.registration_capacity):'')+'</div>'+
+    (active?'<p class="sub">已完成報名。如需更改資料，可按「修改報名」。':'<p class="sub">登入會員可直接報名，會員基本資料會自動帶入。'+(c.registration_approval?' 此活動需要管理員審核。':'')+'</p>')+
+    '<div class="registrationForm"><label>會員編號<input value="'+esc(profile?.member_no!=null?String(profile.member_no).padStart(3,'0'):'—')+'" readonly></label><label>暱稱<input data-reg-nickname value="'+esc(reg?.nickname||profile?.nickname||'')+'" maxlength="40" '+(active?'disabled':'')+'></label><label>Email<input value="'+esc(reg?.email||profile?.email||'')+'" readonly></label><label>備註／補充說明<textarea data-reg-note maxlength="1000" rows="3" '+(active?'disabled':'')+'>'+esc(reg?.note||'')+'</textarea></label>'+fieldHtml+'</div><div class="competitionActions">'+actions+'</div><small data-reg-msg></small></div>';
 }
 async function prepareRegistrationBox(c,box){
   if(!box||!visitorToken())return;
   const profile=await loadRegistrationProfile(); const reg=await getMyRegistration(c.id);
-  box.innerHTML=registrationForm(c,reg,profile);
-  bindRegistrationBox(c.id,box);
+  box.innerHTML=registrationForm(c,reg,profile); bindRegistrationBox(c,box);
 }
-function bindRegistrationBox(id,box){
+function bindRegistrationBox(c,box){
   const submit=box.querySelector('[data-reg-submit]'); const edit=box.querySelector('[data-reg-edit]'); const cancel=box.querySelector('[data-reg-cancel]');
-  if(submit)submit.onclick=()=>submitRegistration(id,box);
-  if(edit)edit.onclick=()=>{box.querySelector('[data-reg-nickname]').disabled=false;box.querySelector('[data-reg-note]').disabled=false;edit.remove();const b=document.createElement('button');b.className='btn';b.textContent='💾 儲存修改';b.dataset.regSubmit=id;box.querySelector('.competitionActions').prepend(b);b.onclick=()=>updateRegistration(id,box)};
-  if(cancel)cancel.onclick=()=>cancelRegistration(id,box);
+  if(submit)submit.onclick=()=>submitRegistration(c,box);
+  if(edit)edit.onclick=()=>{box.querySelectorAll('input[data-reg-nickname],textarea[data-reg-note],input[data-reg-field]').forEach(x=>x.disabled=false);edit.remove();const b=document.createElement('button');b.className='btn';b.textContent='💾 儲存修改';box.querySelector('.competitionActions').prepend(b);b.onclick=()=>updateRegistration(c,box)};
+  if(cancel)cancel.onclick=()=>cancelRegistration(c,box);
 }
-async function submitRegistration(id,box){
+function collectCustomFields(box){const out={};box.querySelectorAll('[data-reg-field]').forEach(x=>{const n=x.dataset.fieldName;if(n)out[n]=x.value.trim()});return out}
+async function createMemberNotification(title,content){try{const uid=(await getCurrentUser())?.id;if(!uid)return;await fetch(SUPABASE_URL+'/rest/v1/notifications',{method:'POST',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify([{user_id:uid,type:'比賽',title,content}])})}catch(e){console.error('通知建立失敗',e)}}
+async function submitRegistration(c,box){
   const profile=await loadRegistrationProfile(); if(!profile){box.querySelector('[data-reg-msg]').textContent='請先登入。';return}
-  const nickname=box.querySelector('[data-reg-nickname]')?.value.trim()||''; const note=box.querySelector('[data-reg-note]')?.value.trim()||null;
-  if(!nickname){box.querySelector('[data-reg-msg]').textContent='請輸入暱稱。';return}
-  const existing=await getMyRegistration(id);
+  const nickname=box.querySelector('[data-reg-nickname]')?.value.trim()||''; const note=box.querySelector('[data-reg-note]')?.value.trim()||null; if(!nickname){box.querySelector('[data-reg-msg]').textContent='請輸入暱稱。';return}
+  const existing=await getMyRegistration(c.id); const custom_fields=collectCustomFields(box);
   const url=SUPABASE_URL+'/rest/v1/competition_registrations'+(existing?'?id=eq.'+encodeURIComponent(existing.id):'');
-  const opts=existing?{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({member_no:profile.member_no,nickname,email:profile.email,note,status:'active',cancelled_at:null})}:{method:'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify({competition_id:id,user_id:profile.id,member_no:profile.member_no,nickname,email:profile.email,note,status:'active'})};
-  const r=await fetch(url,opts); const d=await r.json().catch(()=>[]); const msgEl=box.querySelector('[data-reg-msg]');
-  if(!r.ok){msgEl.textContent=d.message||d.hint||'❌ 報名失敗，可能已經報名。';return}
-  msgEl.textContent='✅ '+(existing?'已重新報名！':'報名成功！'); await prepareRegistrationBox({id},box); loadMyCompetitions();
+  const opts=existing?{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({member_no:profile.member_no,nickname,email:profile.email,note,custom_fields,status:'active',cancelled_at:null})}:{method:'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify({competition_id:c.id,user_id:profile.id,member_no:profile.member_no,nickname,email:profile.email,note,custom_fields,status:'active'})};
+  const r=await fetch(url,opts); const d=await r.json().catch(()=>({})); const msgEl=box.querySelector('[data-reg-msg]');
+  if(!r.ok){msgEl.textContent='❌ '+(d.message||d.hint||'報名失敗，請稍後再試。');return}
+  const resultStatus=(d?.[0]?.status)||null; msgEl.textContent=resultStatus==='pending'?'✅ 已送出報名，等待管理員審核。':'✅ '+(existing?'已重新報名！':'報名成功！'); await createMemberNotification('📝 '+c.name+' 報名結果',resultStatus==='pending'?'報名已送出，等待管理員審核。':'報名已成功。'); await prepareRegistrationBox(c,box); loadMyCompetitions();
 }
-async function updateRegistration(id,box){
-  const nickname=box.querySelector('[data-reg-nickname]')?.value.trim()||''; const note=box.querySelector('[data-reg-note]')?.value.trim()||null;
-  if(!nickname){box.querySelector('[data-reg-msg]').textContent='請輸入暱稱。';return}
-  const uid=(await getCurrentUser())?.id;if(!uid)return;
-  const r=await fetch(SUPABASE_URL+'/rest/v1/competition_registrations?competition_id=eq.'+encodeURIComponent(id)+'&user_id=eq.'+encodeURIComponent(uid)+'&status=eq.active',{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({nickname,note})});
-  box.querySelector('[data-reg-msg]').textContent=r.ok?'✅ 報名資料已更新。':'❌ 更新失敗，請稍後再試。'; if(r.ok)await prepareRegistrationBox({id},box); if(r.ok)loadMyCompetitions();
+async function updateRegistration(c,box){
+  const nickname=box.querySelector('[data-reg-nickname]')?.value.trim()||''; const note=box.querySelector('[data-reg-note]')?.value.trim()||null; if(!nickname){box.querySelector('[data-reg-msg]').textContent='請輸入暱稱。';return}
+  const uid=(await getCurrentUser())?.id;if(!uid)return; const custom_fields=collectCustomFields(box);
+  const r=await fetch(SUPABASE_URL+'/rest/v1/competition_registrations?competition_id=eq.'+encodeURIComponent(c.id)+'&user_id=eq.'+encodeURIComponent(uid)+'&status=in.(active,pending,approved)',{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({nickname,note,custom_fields})});
+  box.querySelector('[data-reg-msg]').textContent=r.ok?'✅ 報名資料已更新。':'❌ 更新失敗，請稍後再試。'; if(r.ok)await prepareRegistrationBox(c,box); if(r.ok)loadMyCompetitions();
 }
-async function cancelRegistration(id,box){
-  if(!confirm('確定要取消這場活動的報名嗎？'))return;
-  const uid=(await getCurrentUser())?.id;if(!uid)return;
-  const r=await fetch(SUPABASE_URL+'/rest/v1/competition_registrations?competition_id=eq.'+encodeURIComponent(id)+'&user_id=eq.'+encodeURIComponent(uid)+'&status=eq.active',{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({status:'cancelled',cancelled_at:new Date().toISOString()})});
-  box.querySelector('[data-reg-msg]').textContent=r.ok?'✅ 已取消報名。':'❌ 取消失敗，請稍後再試。'; if(r.ok){const c={id};await prepareRegistrationBox(c,box);loadMyCompetitions();}
+async function cancelRegistration(c,box){
+  if(!confirm('確定要取消這場活動的報名嗎？'))return; const uid=(await getCurrentUser())?.id;if(!uid)return;
+  const r=await fetch(SUPABASE_URL+'/rest/v1/competition_registrations?competition_id=eq.'+encodeURIComponent(c.id)+'&user_id=eq.'+encodeURIComponent(uid)+'&status=in.(active,pending,approved)',{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({status:'cancelled',cancelled_at:new Date().toISOString()})});
+  box.querySelector('[data-reg-msg]').textContent=r.ok?'✅ 已取消報名。':'❌ 取消失敗，請稍後再試。'; if(r.ok){await createMemberNotification('📝 '+c.name+' 已取消報名','你的報名已取消。');await prepareRegistrationBox(c,box);loadMyCompetitions();}
 }
 
 async function loadCompetitionPage(){
@@ -363,7 +371,7 @@ async function loadMyCompetitions(){
   const rr=await fetch(SUPABASE_URL+'/rest/v1/competition_results?select=id,competition_id,place,score,prize,player_name&user_id=eq.'+encodeURIComponent(uid)+'&order=created_at.desc',{headers:auth()});
   const results=rr.ok?await rr.json():[];
   const resultByComp=new Map(results.map(x=>[x.competition_id,x]));
-  box.innerHTML=regs.length?regs.map(x=>{const res=resultByComp.get(x.competition_id);return '<article class="notice"><div class="date">'+esc(x.competitions?.category||'')+' · '+esc(x.competitions?.event_date||'未設定日期')+' '+competitionStatusBadge(x.competitions?.event_date)+'</div><h3>📝 '+esc(x.competitions?.name||'活動／比賽')+'</h3><p><b>報名狀態：</b>'+esc(x.status==='active'?'已報名':'已取消')+'　<b>報名暱稱：</b>'+esc(x.nickname||'')+(x.note?'　<b>備註：</b>'+esc(x.note):'')+'</p>'+(res?'<p>🏆 <b>成績：</b>第 '+esc(res.place)+' 名'+(res.score!=null?'　分數 '+esc(res.score):'')+(res.prize?'　獎項 '+esc(res.prize):'')+'</p>':'')+'</article>'}).join(''):'<div class="empty">目前還沒有報名或比賽紀錄。</div>';
+  box.innerHTML=regs.length?regs.map(x=>{const res=resultByComp.get(x.competition_id);return '<article class="notice"><div class="date">'+esc(x.competitions?.category||'')+' · '+esc(x.competitions?.event_date||'未設定日期')+' '+competitionStatusBadge(x.competitions?.event_date)+'</div><h3>📝 '+esc(x.competitions?.name||'活動／比賽')+'</h3><p><b>報名狀態：</b>'+esc(registrationStatusText(x.status))+'　<b>報名暱稱：</b>'+esc(x.nickname||'')+(x.note?'　<b>備註：</b>'+esc(x.note):'')+'</p>'+(res?'<p>🏆 <b>成績：</b>第 '+esc(res.place)+' 名'+(res.score!=null?'　分數 '+esc(res.score):'')+(res.prize?'　獎項 '+esc(res.prize):'')+'</p>':'')+'</article>'}).join(''):'<div class="empty">目前還沒有報名或比賽紀錄。</div>';
 }
 async function loadMyAwards(){
   const box=$('myAwards'); if(!box||!visitorToken())return;

@@ -51,6 +51,14 @@
   <div id="competitionCategoryList" class="newsList"></div>
 </div>
 <label>比賽日期<input id="competitionDate" type="date"></label>
+<div class="registrationAdvancedGrid">
+  <label>報名截止時間<input id="competitionRegistrationDeadline" type="datetime-local"></label>
+  <label>報名人數上限<input id="competitionRegistrationCapacity" type="number" min="1" step="1" placeholder="留空＝不限"></label>
+  <label class="check"><input id="competitionRegistrationApproval" type="checkbox"> 需要管理員審核報名</label>
+</div>
+<label>自訂報名欄位（每行一個欄位名稱）<textarea id="competitionRegistrationFields" rows="3" placeholder="例如：Discord ID
+遊戲暱稱
+是否需要語音"></textarea></label>
 <label>比賽說明<textarea id="competitionDescription" rows="4" placeholder="比賽規則、主題或其他說明"></textarea></label>
 <div class="resultEditor">
   <h3>參賽成績</h3>
@@ -65,7 +73,7 @@
 </div>
 <small id="competitionMsg"></small>
 </div>
-<div id="competitionRegistrationPanel" class="registrationAdminPanel hidden"><h3>📝 報名名單</h3><div class="adminListTools"><input id="registrationSearch" type="search" placeholder="搜尋會員編號、暱稱、Email"><select id="registrationStatusFilter"><option value="all">全部狀態</option><option value="active">已報名</option><option value="cancelled">已取消</option></select></div><div id="competitionRegistrations" class="newsList"></div></div><div class="adminListTools"><input id="competitionSearch" type="search" placeholder="搜尋比賽名稱、說明、分類"><select id="competitionStatusFilter"><option value="all">全部狀態</option><option value="draft">草稿</option><option value="upcoming">即將開始</option><option value="today">今天</option><option value="ended">已結束</option><option value="nodate">日期未設定</option></select><select id="competitionCategoryFilter"><option value="all">全部分類</option></select></div><h2 style="margin-top:28px">比賽列表</h2><div id="adminCompetitions" class="newsList"></div></div>
+<div id="competitionRegistrationPanel" class="registrationAdminPanel hidden"><h3>📝 報名名單</h3><div class="competitionActions"><button class="btn secondary" id="exportCompetitionRegistrations" type="button">📥 匯出 CSV</button></div><div class="adminListTools"><input id="registrationSearch" type="search" placeholder="搜尋會員編號、暱稱、Email"><select id="registrationStatusFilter"><option value="all">全部狀態</option><option value="pending">待審核</option><option value="approved">已通過</option><option value="active">已報名</option><option value="rejected">未通過</option><option value="cancelled">已取消</option></select></div><div id="competitionRegistrations" class="newsList"></div></div><div class="adminListTools"><input id="competitionSearch" type="search" placeholder="搜尋比賽名稱、說明、分類"><select id="competitionStatusFilter"><option value="all">全部狀態</option><option value="draft">草稿</option><option value="upcoming">即將開始</option><option value="today">今天</option><option value="ended">已結束</option><option value="nodate">日期未設定</option></select><select id="competitionCategoryFilter"><option value="all">全部分類</option></select></div><h2 style="margin-top:28px">比賽列表</h2><div id="adminCompetitions" class="newsList"></div></div>
 <div id="quickLinkTab" class="tabPanel hidden">
 <h2>🔗 快速連結管理</h2>
 <p class="sub">管理網站首頁右側的快速連結。可設定名稱、網址、圖示、排序與是否顯示。</p>
@@ -90,4 +98,4 @@
 </div>
 </div>
 <div id="notificationTab" class="tabPanel hidden"><h2>🔔 通知管理</h2><p class="sub">可發送給單一會員或全部會員；通知會出現在「我的 → 我的通知」。</p><div class="editor"><label>通知標題<input id="notificationTitle"></label><label>通知類型<select id="notificationType"><option value="系統">📢 系統</option><option value="比賽">🏆 比賽</option><option value="優惠券">🎟️ 優惠券</option><option value="客服">💬 客服</option></select></label><label>通知內容<textarea id="notificationContent" rows="5"></textarea></label><label>發送給<select id="notificationUser"></select></label><button class="btn" id="createNotification">🔔 發送通知</button><small id="notificationMsg"></small></div><h2 style="margin-top:40px">通知紀錄</h2><div id="adminNotifications" class="newsList"></div></div><div id="supportTab" class="tabPanel hidden"><h2>💬 客服中心</h2><div class="adminListTools"><select id="supportStatusFilter"><option value="all">全部狀態</option><option value="open">待處理</option><option value="answered">已回覆</option></select><input id="supportSearch" type="search" placeholder="搜尋主旨、內容"></div><div id="ticketList" class="newsList"></div></div>
-</section></main></div><script src="config.js"></script><script src="admin.js?v=registration-v1"></script></body></html>
+</section></main></div><script src="config.js"></script><script src="admin.js?v=round3-v13"></script></body></html>

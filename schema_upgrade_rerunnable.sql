@@ -465,8 +465,56 @@ create table if not exists public.competition_registrations (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   cancelled_at timestamptz,
+  custom_fields jsonb not null default '{}'::jsonb,
   unique (competition_id,user_id)
 );
+
+-- #13 線上報名進階：報名截止、名額、審核與自訂欄位
+alter table public.competitions add column if not exists registration_deadline timestamptz;
+alter table public.competitions add column if not exists registration_capacity integer;
+alter table public.competitions add column if not exists registration_approval boolean not null default false;
+alter table public.competitions add column if not exists registration_fields jsonb not null default '[]'::jsonb;
+alter table public.competition_registrations add column if not exists custom_fields jsonb not null default '{}'::jsonb;
+alter table public.competition_registrations drop constraint if exists competition_registrations_status_check;
+alter table public.competition_registrations add constraint competition_registrations_status_check check (status in ('active','pending','approved','rejected','cancelled'));
+
+create index if not exists competitions_registration_deadline_idx on public.competitions(registration_deadline);
+create index if not exists competition_registrations_status_idx on public.competition_registrations(competition_id,status);
+
+create or replace function public.check_competition_registration_rules()
+returns trigger
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare
+  c public.competitions%rowtype;
+  active_count integer;
+  next_status text;
+begin
+  select * into c from public.competitions where id=new.competition_id;
+  if c.id is null then raise exception '找不到活動／比賽'; end if;
+  if new.status in ('cancelled','rejected') then return new; end if;
+  if c.registration_deadline is not null and now() > c.registration_deadline then
+    raise exception '報名已截止';
+  end if;
+  if c.registration_capacity is not null and c.registration_capacity > 0 then
+    select count(*) into active_count from public.competition_registrations
+      where competition_id=new.competition_id
+        and user_id<>new.user_id
+        and status in ('active','pending','approved');
+    if active_count >= c.registration_capacity then raise exception '報名名額已滿'; end if;
+  end if;
+  next_status := case when c.registration_approval then 'pending' else 'approved' end;
+  if tg_op='INSERT' then new.status := next_status; end if;
+  if tg_op='UPDATE' and new.status='active' then new.status := next_status; end if;
+  return new;
+end; $$;
+
+drop trigger if exists trg_check_competition_registration_rules on public.competition_registrations;
+create trigger trg_check_competition_registration_rules
+before insert or update on public.competition_registrations
+for each row execute function public.check_competition_registration_rules();
 alter table public.competition_registrations enable row level security;
 drop policy if exists "competition_registrations_owner_select" on public.competition_registrations;
 drop policy if exists "competition_registrations_owner_insert" on public.competition_registrations;
