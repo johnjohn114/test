@@ -451,3 +451,31 @@ for update to authenticated using(user_id=auth.uid()) with check(user_id=auth.ui
 create policy notification_admin_all on public.notifications
 for all to authenticated using(public.is_admin()) with check(public.is_admin());
 create index if not exists notifications_user_idx on public.notifications(user_id, created_at desc);
+
+-- #12 線上報名系統 v1
+create table if not exists public.competition_registrations (
+  id uuid primary key default gen_random_uuid(),
+  competition_id uuid not null references public.competitions(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  member_no integer,
+  nickname text not null,
+  email text,
+  note text,
+  status text not null default 'active' check (status in ('active','cancelled')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  cancelled_at timestamptz,
+  unique (competition_id,user_id)
+);
+alter table public.competition_registrations enable row level security;
+drop policy if exists "competition_registrations_owner_select" on public.competition_registrations;
+drop policy if exists "competition_registrations_owner_insert" on public.competition_registrations;
+drop policy if exists "competition_registrations_owner_update" on public.competition_registrations;
+drop policy if exists "competition_registrations_owner_delete" on public.competition_registrations;
+drop policy if exists "competition_registrations_admin_all" on public.competition_registrations;
+create policy "competition_registrations_owner_select" on public.competition_registrations for select to authenticated using (user_id=auth.uid() or exists(select 1 from public.profiles p where p.id=auth.uid() and p.role='admin'));
+create policy "competition_registrations_owner_insert" on public.competition_registrations for insert to authenticated with check (user_id=auth.uid() or exists(select 1 from public.profiles p where p.id=auth.uid() and p.role='admin'));
+create policy "competition_registrations_owner_update" on public.competition_registrations for update to authenticated using (user_id=auth.uid() or exists(select 1 from public.profiles p where p.id=auth.uid() and p.role='admin')) with check (user_id=auth.uid() or exists(select 1 from public.profiles p where p.id=auth.uid() and p.role='admin'));
+create policy "competition_registrations_owner_delete" on public.competition_registrations for delete to authenticated using (user_id=auth.uid() or exists(select 1 from public.profiles p where p.id=auth.uid() and p.role='admin'));
+create index if not exists competition_registrations_competition_idx on public.competition_registrations(competition_id,created_at desc);
+create index if not exists competition_registrations_user_idx on public.competition_registrations(user_id,created_at desc);

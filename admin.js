@@ -259,6 +259,19 @@ function renderTickets(){
 }
 async function replyTicket(id){const ta=document.querySelector('[data-reply="'+CSS.escape(id)+'"]');const reply=ta?ta.value.trim():'';const old=await fetch(SUPABASE_URL+'/rest/v1/support_tickets?id=eq.'+encodeURIComponent(id)+'&select=id,user_id,admin_reply',{headers:auth()});const ticket=(old.ok?(await old.json()):[])[0];const r=await fetch(SUPABASE_URL+'/rest/v1/support_tickets?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({admin_reply:reply,status:reply?'answered':'open'})});if(r.ok&&reply&&ticket?.user_id&&reply!==String(ticket.admin_reply||'')){try{await createNotifications([{user_id:ticket.user_id,type:'客服',title:'💬 客服已有新回覆',content:'你的客服問題已有管理員回覆，請到「我的 → 我的客服」查看。'}])}catch(e){console.error(e)}}alert(r.ok?'已儲存回覆。':'儲存失敗。');if(r.ok)await tickets()}
 
+
+async function loadCompetitionRegistrations(competitionId){
+  const panel=$('competitionRegistrationPanel'),box=$('competitionRegistrations'); if(!panel||!box||!competitionId)return;
+  panel.classList.remove('hidden'); panel.dataset.competitionId=competitionId;
+  const r=await fetch(SUPABASE_URL+'/rest/v1/competition_registrations?select=*&competition_id=eq.'+encodeURIComponent(competitionId)+'&order=created_at.asc',{headers:auth()});
+  const rows=r.ok?await r.json():[]; window.__competitionRegistrations=rows; renderCompetitionRegistrations();
+}
+function renderCompetitionRegistrations(){
+  const box=$('competitionRegistrations');if(!box)return;const a=window.__competitionRegistrations||[];const q=($('registrationSearch')?.value||'').trim().toLowerCase();const st=$('registrationStatusFilter')?.value||'all';
+  const rows=a.filter(x=>{const hit=!q||[x.member_no,x.nickname,x.email,x.note].some(v=>String(v||'').toLowerCase().includes(q));return hit&&(st==='all'||x.status===st)});
+  box.innerHTML=rows.map(x=>'<article class="notice"><div class="date">'+(x.status==='active'?'🟢 已報名':'⚪ 已取消')+' · '+esc(String(x.created_at).slice(0,16).replace('T',' '))+'</div><h3>會員 '+esc(x.member_no!=null?String(x.member_no).padStart(3,'0'):'—')+'｜'+esc(x.nickname||'')+'</h3><p>Email：'+esc(x.email||'—')+(x.note?'<br>備註：'+esc(x.note):'')+'</p><small>報名 ID：'+esc(x.id)+'</small></article>').join('')||'<div class="empty">目前沒有符合條件的報名資料。</div>';
+}
+
 function clearCompetition(){
   if($('competitionId'))$('competitionId').value='';
   $('competitionName').value='';
@@ -266,6 +279,7 @@ function clearCompetition(){
   $('competitionDate').value='';
   $('competitionDescription').value='';
   $('competitionResults').innerHTML='';
+  $('competitionRegistrationPanel')?.classList.add('hidden');
   msg('competitionMsg','');
   addCompetitionResult();
 }
@@ -428,6 +442,7 @@ async function loadCompetition(id){
   const results=rr.ok?await rr.json():[];$('competitionResults').innerHTML='';results.forEach(addCompetitionResult);if(!results.length)addCompetitionResult();
   msg('competitionMsg',c.published?'📢 目前已公布':'📝 目前為草稿');
   document.querySelector('[data-tab="competitionTab"]').click();
+  loadCompetitionRegistrations(id);
 }
 async function setCompetitionPublished(id,published){
   if(!id){alert('找不到比賽 ID，無法更新公布狀態。');return}
@@ -503,6 +518,6 @@ function bind(){
   if($('productSearch'))$('productSearch').addEventListener('input',renderAdminProducts); if($('productStatusFilter'))$('productStatusFilter').addEventListener('change',renderAdminProducts);
   if($('couponSearch'))$('couponSearch').addEventListener('input',renderAdminCoupons);
   if($('supportSearch'))$('supportSearch').addEventListener('input',renderTickets); if($('supportStatusFilter'))$('supportStatusFilter').addEventListener('change',renderTickets);
-  if($('competitionSearch'))$('competitionSearch').addEventListener('input',renderAdminCompetitions); if($('competitionStatusFilter'))$('competitionStatusFilter').addEventListener('change',renderAdminCompetitions); if($('competitionCategoryFilter'))$('competitionCategoryFilter').addEventListener('change',renderAdminCompetitions);
+  if($('competitionSearch'))$('competitionSearch').addEventListener('input',renderAdminCompetitions); if($('competitionStatusFilter'))$('competitionStatusFilter').addEventListener('change',renderAdminCompetitions); if($('competitionCategoryFilter'))$('competitionCategoryFilter').addEventListener('change',renderAdminCompetitions); if($('registrationSearch'))$('registrationSearch').addEventListener('input',renderCompetitionRegistrations); if($('registrationStatusFilter'))$('registrationStatusFilter').addEventListener('change',renderCompetitionRegistrations);
   if($('loginButton'))$('loginButton').onclick=login;if($('refreshDashboard'))$('refreshDashboard').onclick=dashboard;if($('logoutButton'))$('logoutButton').onclick=logout;if($('saveContent'))$('saveContent').onclick=save;if($('publishButton'))$('publishButton').onclick=publish;if($('saveProduct'))$('saveProduct').onclick=saveProduct;if($('clearProduct'))$('clearProduct').onclick=clearProduct;if($('createVisitor'))$('createVisitor').onclick=createVisitor;if($('setSharedVisitorPassword'))$('setSharedVisitorPassword').onclick=setSharedVisitorPassword;if($('createCoupon'))$('createCoupon').onclick=createCoupon;if($('createNotification'))$('createNotification').onclick=createNotification;if($('addCompetitionResult'))$('addCompetitionResult').onclick=()=>addCompetitionResult();if($('saveCompetition'))$('saveCompetition').onclick=saveCompetition;if($('publishCompetition'))$('publishCompetition').onclick=async()=>{const ok=await saveCompetition();const id=$('competitionId').value;if(ok&&id)await setCompetitionPublished(id,true)};if($('unpublishCompetition'))$('unpublishCompetition').onclick=async()=>{const id=$('competitionId').value;if(id)await setCompetitionPublished(id,false)};if($('clearCompetition'))$('clearCompetition').onclick=clearCompetition;if($('addCompetitionCategory'))$('addCompetitionCategory').onclick=addCompetitionCategory;if($('saveQuickLink'))$('saveQuickLink').onclick=saveQuickLink;if($('clearQuickLink'))$('clearQuickLink').onclick=clearQuickLink;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabPanel').forEach(x=>x.classList.add('hidden'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));$(b.dataset.tab).classList.remove('hidden');b.classList.add('active');if(b.dataset.tab==='dashboardTab')dashboard();if(b.dataset.tab==='newsTab')news();if(b.dataset.tab==='productTab')products();if(b.dataset.tab==='visitorTab')visitors();if(b.dataset.tab==='couponTab')coupons();if(b.dataset.tab==='competitionTab'){competitionCategories();competitions();if(!$('competitionResults').children.length)addCompetitionResult()}if(b.dataset.tab==='quickLinkTab')quickLinks();if(b.dataset.tab==='supportTab')tickets();if(b.dataset.tab==='notificationTab')notifications()})}
 document.addEventListener('DOMContentLoaded',()=>{bindMobileAdminNav();bind();if(localStorage.getItem('access_token')){$('login').classList.add('hidden');$('dashboard').classList.remove('hidden');load()}else if(!configured())msg('loginError','請把你原本可用的 config.js 放回來。')});
