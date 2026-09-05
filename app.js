@@ -75,24 +75,41 @@ async function loadMyCoupons(){
 }
 
 async function loadCompetitionMenu(){
-  const box=$('competitionMenu');
-  if(!box)return;
+  const menus=[...document.querySelectorAll('#competitionMenu')];
+  if(!menus.length||!configured())return;
+  const cacheKey='competition-menu-v2';
+  const now=Date.now();
   try{
-    const h=auth();
-    const r=await Promise.all([
+    const cached=sessionStorage.getItem(cacheKey);
+    if(cached){
+      const data=JSON.parse(cached);
+      if(data?.at && now-data.at<5*60*1000 && Array.isArray(data.groups)){
+        renderCompetitionMenus(menus,data.groups); return;
+      }
+    }
+  }catch(e){}
+  const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY};
+  try{
+    const [cr,gr]=await Promise.all([
+      fetch(SUPABASE_URL+'/rest/v1/competitions?select=id,name,category&published=eq.true&order=event_date.desc,created_at.desc&limit=200',{headers:h}),
       fetch(SUPABASE_URL+'/rest/v1/competition_categories?select=name&order=name.asc&limit=100',{headers:h})
     ]);
-    const cr=r[0];
-    if(!cr.ok)throw new Error('category '+cr.status);
-    const cats=await cr.json();
-    const seen=new Set();
-    const categories=(cats||[]).map(x=>String(x.name||'').trim()).filter(x=>x&&!seen.has(x)&&seen.add(x));
-    const iconFor=cat=>cat==='Minecraft'?'🎮':(cat==='蛋仔'||cat==='蛋仔派對'?'🥚':'🏷️');
-    box.innerHTML='<a href="competitions.html">📚 全部歷屆成績</a><a href="competitions.html#leaderboard">🏆 達人榜</a>'+
-      categories.map(cat=>'<a href="competitions.html?category='+encodeURIComponent(cat)+'">'+iconFor(cat)+' '+esc(cat)+'</a>').join('');
+    const rows=cr.ok?await cr.json():[];
+    const cats=gr.ok?await gr.json():[];
+    const names=['Minecraft','蛋仔'];
+    [...cats,...rows].forEach(x=>{if(x?.category && !names.includes(x.category))names.push(x.category);if(x?.name && !names.includes(x.name))names.push(x.name)});
+    const groups=names.map(cat=>({cat,rows:rows.filter(x=>x.category===cat)}));
+    try{sessionStorage.setItem(cacheKey,JSON.stringify({at:now,groups}));}catch(e){}
+    renderCompetitionMenus(menus,groups);
   }catch(e){
     console.error('歷屆成績選單載入失敗:',e);
+    renderCompetitionMenus(menus,[{cat:'Minecraft',rows:[]},{cat:'蛋仔',rows:[]}]);
   }
+}
+function renderCompetitionMenus(menus,groups){
+  const iconFor=cat=>cat==='Minecraft'?'🎮':cat==='蛋仔'?'🥚':'🏷️';
+  const html='<a href="competitions.html">📚 全部歷屆成績</a><a href="competitions.html#leaderboard">🏆 達人榜</a>'+groups.map(g=>'<div class="dropdownGroup"><a class="dropdownGroupTitle" href="competitions.html?category='+encodeURIComponent(g.cat)+'">'+iconFor(g.cat)+' '+esc(g.cat)+' 分類</a></div>').join('');
+  menus.forEach(m=>m.innerHTML=html);
 }
 
 async function loadQuickLinks(){
