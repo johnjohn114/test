@@ -412,6 +412,14 @@ async function markAllNotificationsRead(){
   const r=await fetch(SUPABASE_URL+'/rest/v1/notifications?user_id=eq.'+encodeURIComponent(uid)+'&read_at=is.null',{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({read_at:new Date().toISOString()})});
   if(r.ok){show('notificationMsg','✅ 已全部標記為已讀。');await loadMyNotifications();}else show('notificationMsg','❌ 操作失敗，請稍後再試。');
 }
+async function deleteReadNotifications(){
+  const uid=(await getCurrentUser())?.id;if(!uid)return;
+  const count=myNotificationRows.filter(x=>x.read_at).length;
+  if(!count){show('notificationMsg','目前沒有已讀通知可刪除。');return;}
+  if(!confirm('確定刪除全部 '+count+' 則已讀通知？刪除後無法復原。'))return;
+  const r=await fetch(SUPABASE_URL+'/rest/v1/notifications?user_id=eq.'+encodeURIComponent(uid)+'&read_at=not.is.null',{method:'DELETE',headers:{...auth(),Prefer:'return=minimal'}});
+  if(r.ok){show('notificationMsg','✅ 已刪除 '+count+' 則已讀通知。');await loadMyNotifications();}else show('notificationMsg','❌ 刪除失敗，請確認資料庫權限後再試。');
+}
 
 
 function searchTextScore(row, q, fields){
@@ -459,4 +467,5 @@ function initSiteSearch(){
 
 function showMySection(id){document.querySelectorAll('.myPanel').forEach(x=>x.classList.add('hidden'));$(id)?.classList.remove('hidden');document.querySelectorAll('.mySubnav a').forEach(a=>a.classList.toggle('active',a.dataset.target===id));}
 
-window.addEventListener('DOMContentLoaded',async()=>{bindMobileNav();initSiteSearch();if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;const sessionOk=await ensureVisitorSession();if(sessionOk){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if(sessionOk)loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&sessionOk)loadMyCoupons();loadQuickLinks();loadCompetitionMenu();loadNotificationBadge();if($('competitionList'))loadCompetitionPage();if($('myProfile')&&sessionOk){loadMyProfile();loadMyCompetitions();loadMyAwards();loadMyNotifications();$('saveMyProfile')?.addEventListener('click',saveMyProfile);$('changeMyPassword')?.addEventListener('click',changeMyPassword);showMySection(location.hash?location.hash.slice(1):'myProfilePanel');document.querySelectorAll('.mySubnav a').forEach(a=>a.addEventListener('click',()=>showMySection(a.dataset.target)));} });
+window.addEventListener('DOMContentLoaded',async()=>{bindMobileNav();initSiteSearch();if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;const sessionOk=await ensureVisitorSession();if(sessionOk){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if(sessionOk)loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&sessionOk)loadMyCoupons();loadQuickLinks();loadCompetitionMenu();loadNotificationBadge();if($('competitionList'))loadCompetitionPage();if($('myProfile')&&sessionOk){loadMyProfile();loadMyCompetitions();loadMyAwards();loadMyNotifications();$('saveMyProfile')?.addEventListener('click',saveMyProfile);$('changeMyPassword')?.addEventListener('click',changeMyPassword);$('markAllNotifications')?.addEventListener('click',markAllNotificationsRead);$('deleteReadNotifications')?.addEventListener('click',deleteReadNotifications);showMySection(location.hash?location.hash.slice(1):'myProfilePanel');document.querySelectorAll('.mySubnav a').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const target=a.dataset.target;history.replaceState(null,'','#'+target);showMySection(target);}));} });
+window.addEventListener('hashchange',()=>{const id=location.hash.slice(1);if(id&&$(id))showMySection(id);});

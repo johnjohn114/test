@@ -443,11 +443,14 @@ alter table public.notifications add column if not exists read_at timestamptz;
 alter table public.notifications enable row level security;
 drop policy if exists notification_owner_read on public.notifications;
 drop policy if exists notification_owner_update on public.notifications;
+drop policy if exists notification_owner_delete on public.notifications;
 drop policy if exists notification_admin_all on public.notifications;
 create policy notification_owner_read on public.notifications
 for select to authenticated using(user_id=auth.uid() or public.is_admin());
 create policy notification_owner_update on public.notifications
 for update to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
+create policy notification_owner_delete on public.notifications
+for delete to authenticated using(user_id=auth.uid());
 create policy notification_admin_all on public.notifications
 for all to authenticated using(public.is_admin()) with check(public.is_admin());
 create index if not exists notifications_user_idx on public.notifications(user_id, created_at desc);
