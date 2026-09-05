@@ -32,6 +32,15 @@
 <input id="competitionId" type="hidden">
 <label>比賽名稱<input id="competitionName" placeholder="例如：Minecraft 建築大賽 #1"></label>
 <label>分類<select id="competitionCategory"><option value="Minecraft">Minecraft</option><option value="蛋仔">蛋仔</option></select></label>
+<div class="categoryManager">
+  <h3>🏷️ 賽事分類管理</h3>
+  <p class="sub">可新增、修改自訂分類；預設的 Minecraft 與蛋仔分類保留。</p>
+  <div class="inlineForm">
+    <input id="competitionCategoryNew" placeholder="輸入新的賽事分類，例如：生存挑戰">
+    <button class="btn secondary" type="button" id="addCompetitionCategory">＋ 新增分類</button>
+  </div>
+  <div id="competitionCategoryList" class="newsList"></div>
+</div>
 <label>比賽日期<input id="competitionDate" type="date"></label>
 <label>比賽說明<textarea id="competitionDescription" rows="4" placeholder="比賽規則、主題或其他說明"></textarea></label>
 <div class="resultEditor">

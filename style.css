@@ -193,3 +193,16 @@ footer{text-align:center;padding:45px 20px;background:#5f4b82;color:#fff;margin-
 @media(max-width:700px){
   .dashboardHeader{align-items:flex-start;flex-direction:column}.dashboardCards{grid-template-columns:repeat(2,1fr)}.dashboardGrid{grid-template-columns:1fr}.dashboardBox{padding:18px}.dashboardLink{flex-direction:column;gap:4px}.dashboardLink small{white-space:normal}
 }
+
+/* Round 2 #7/#8: 分類選單恢復＋手機友善 */
+.dropdownGroup{padding:6px 0;border-top:1px solid #f0e9f8;margin-top:6px}
+.dropdownGroupTitle{display:block!important;font-weight:900!important;color:#6749cc!important;background:#faf7ff}
+.dropdownSubLink{display:block!important;padding-left:26px!important;font-size:14px!important}
+.dropdownSubLink::before{content:'↳ ';opacity:.5}
+@media(max-width:850px){
+  .dropdownGroupTitle{padding-top:10px!important;padding-bottom:10px!important}
+  .dropdownSubLink{padding-top:9px!important;padding-bottom:9px!important}
+}
+
+
+.categoryManager{margin-top:18px;padding:16px;border:1px solid #e5e7eb;border-radius:14px;background:#fafafa}.categoryManager h3{margin:0 0 6px}.categoryManager .sub{margin:0 0 12px}.inlineForm{display:flex;gap:10px;align-items:center;margin-bottom:12px}.inlineForm input{flex:1}.categoryManager .newsList{margin-top:10px}.categoryManager .newsList .notice{padding:12px 14px}.categoryManager .newsList .notice .date{margin-bottom:8px}@media (max-width:640px){.inlineForm{flex-direction:column;align-items:stretch}.inlineForm .btn{width:100%}}
