@@ -591,6 +591,87 @@ create index if not exists competition_registrations_user_idx on public.competit
 
 
 
+
+-- #22 會員成長第2階段：活躍／連續參與＋隱藏／彩蛋成就
+create table if not exists public.growth_activity_days (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  activity_date date not null,
+  source text not null default 'visit',
+  created_at timestamptz not null default now(),
+  primary key(user_id,activity_date)
+);
+create index if not exists growth_activity_days_user_date_idx on public.growth_activity_days(user_id,activity_date desc);
+alter table public.growth_activity_days enable row level security;
+drop policy if exists growth_activity_days_owner on public.growth_activity_days;
+create policy growth_activity_days_owner on public.growth_activity_days for select to authenticated using(user_id=auth.uid() or public.is_admin());
+
+alter table public.growth_achievements drop constraint if exists growth_achievements_achievement_type_check;
+alter table public.growth_achievements add constraint growth_achievements_achievement_type_check check(achievement_type in ('registration_count','result_place','points','active_days','login_streak','registration_streak'));
+
+create or replace function public.record_growth_activity()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare uid uuid:=auth.uid(); d date:=current_date; streak integer:=0; days integer:=0; cur date;
+begin
+ if uid is null then raise exception '請先登入'; end if;
+ insert into public.growth_activity_days(user_id,activity_date,source) values(uid,d,'visit') on conflict do nothing;
+ select count(*) into days from public.growth_activity_days where user_id=uid and activity_date >= date_trunc('month',current_date)::date;
+ cur:=d;
+ while exists(select 1 from public.growth_activity_days where user_id=uid and activity_date=cur) loop
+   streak:=streak+1; cur:=cur-1;
+ end loop;
+ return jsonb_build_object('active_days',days,'login_streak',streak);
+end; $$;
+revoke all on function public.record_growth_activity() from public;
+grant execute on function public.record_growth_activity() to authenticated;
+
+create or replace function public.check_growth_achievements(p_user_id uuid default auth.uid())
+returns integer language plpgsql security definer set search_path=public as $$
+declare a public.growth_achievements%rowtype; unlocked integer:=0; n integer:=0; pts integer:=0; streak integer:=0; days integer:=0;
+begin
+ if p_user_id is null then return 0; end if;
+ select growth_points into pts from public.profiles where id=p_user_id;
+ select count(*) into days from public.growth_activity_days where user_id=p_user_id and activity_date >= date_trunc('month',current_date)::date;
+ if days=0 then
+   select count(*) into days from public.growth_activity_days where user_id=p_user_id;
+ end if;
+ if exists(select 1 from public.growth_activity_days where user_id=p_user_id and activity_date=current_date) then
+   n:=0;
+   while exists(select 1 from public.growth_activity_days where user_id=p_user_id and activity_date=(current_date-n)) loop n:=n+1; end loop;
+   streak:=n;
+ end if;
+ for a in select * from public.growth_achievements where active=true loop
+   if exists(select 1 from public.growth_user_achievements where user_id=p_user_id and achievement_id=a.id) then continue; end if;
+   n:=0;
+   if a.achievement_type='registration_count' then
+     select count(*) into n from public.competition_registrations where user_id=p_user_id and status in ('active','pending','approved');
+   elsif a.achievement_type='result_place' then
+     select count(*) into n from public.competition_results where user_id=p_user_id and place=1;
+   elsif a.achievement_type='points' then n:=coalesce(pts,0);
+   elsif a.achievement_type='active_days' then n:=days;
+   elsif a.achievement_type='login_streak' then n:=streak;
+   elsif a.achievement_type='registration_streak' then
+     select count(*) into n from public.growth_activity_days d where d.user_id=p_user_id and d.activity_date >= current_date-6;
+   end if;
+   if n>=a.requirement_count then
+     insert into public.growth_user_achievements(user_id,achievement_id) values(p_user_id,a.id) on conflict do nothing;
+     if found then
+       unlocked:=unlocked+1;
+       if a.reward_points>0 then perform public.award_growth_points(p_user_id,a.reward_points,'解鎖成就：'||a.title,'achievement',a.id::text,'achievement:'||a.id::text||':'||p_user_id::text,null); end if;
+     end if;
+   end if;
+ end loop;
+ return unlocked;
+end; $$;
+revoke all on function public.check_growth_achievements(uuid) from public;
+grant execute on function public.check_growth_achievements(uuid) to authenticated;
+
+-- Seed two examples for the new system; existing data is preserved.
+insert into public.growth_achievements(code,title,description,achievement_type,requirement_count,reward_points,icon,rarity,hidden,active)
+values
+('active_7_days','活躍一週','累積 7 天活躍紀錄。', 'active_days',7,20,'🔥','rare',false,true),
+('secret_midnight','？？？','這是一個神秘的彩蛋成就。', 'login_streak',3,50,'🥚','legendary',true,true)
+on conflict(code) do nothing;
+
 notify pgrst, 'reload schema';
 
 
@@ -840,5 +921,86 @@ drop trigger if exists trg_growth_result_reward on public.competition_results;
 create trigger trg_growth_result_reward after insert on public.competition_results for each row execute function public.growth_result_reward();
 
 
+
+
+-- #22 會員成長第2階段：活躍／連續參與＋隱藏／彩蛋成就
+create table if not exists public.growth_activity_days (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  activity_date date not null,
+  source text not null default 'visit',
+  created_at timestamptz not null default now(),
+  primary key(user_id,activity_date)
+);
+create index if not exists growth_activity_days_user_date_idx on public.growth_activity_days(user_id,activity_date desc);
+alter table public.growth_activity_days enable row level security;
+drop policy if exists growth_activity_days_owner on public.growth_activity_days;
+create policy growth_activity_days_owner on public.growth_activity_days for select to authenticated using(user_id=auth.uid() or public.is_admin());
+
+alter table public.growth_achievements drop constraint if exists growth_achievements_achievement_type_check;
+alter table public.growth_achievements add constraint growth_achievements_achievement_type_check check(achievement_type in ('registration_count','result_place','points','active_days','login_streak','registration_streak'));
+
+create or replace function public.record_growth_activity()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare uid uuid:=auth.uid(); d date:=current_date; streak integer:=0; days integer:=0; cur date;
+begin
+ if uid is null then raise exception '請先登入'; end if;
+ insert into public.growth_activity_days(user_id,activity_date,source) values(uid,d,'visit') on conflict do nothing;
+ select count(*) into days from public.growth_activity_days where user_id=uid and activity_date >= date_trunc('month',current_date)::date;
+ cur:=d;
+ while exists(select 1 from public.growth_activity_days where user_id=uid and activity_date=cur) loop
+   streak:=streak+1; cur:=cur-1;
+ end loop;
+ return jsonb_build_object('active_days',days,'login_streak',streak);
+end; $$;
+revoke all on function public.record_growth_activity() from public;
+grant execute on function public.record_growth_activity() to authenticated;
+
+create or replace function public.check_growth_achievements(p_user_id uuid default auth.uid())
+returns integer language plpgsql security definer set search_path=public as $$
+declare a public.growth_achievements%rowtype; unlocked integer:=0; n integer:=0; pts integer:=0; streak integer:=0; days integer:=0;
+begin
+ if p_user_id is null then return 0; end if;
+ select growth_points into pts from public.profiles where id=p_user_id;
+ select count(*) into days from public.growth_activity_days where user_id=p_user_id and activity_date >= date_trunc('month',current_date)::date;
+ if days=0 then
+   select count(*) into days from public.growth_activity_days where user_id=p_user_id;
+ end if;
+ if exists(select 1 from public.growth_activity_days where user_id=p_user_id and activity_date=current_date) then
+   n:=0;
+   while exists(select 1 from public.growth_activity_days where user_id=p_user_id and activity_date=(current_date-n)) loop n:=n+1; end loop;
+   streak:=n;
+ end if;
+ for a in select * from public.growth_achievements where active=true loop
+   if exists(select 1 from public.growth_user_achievements where user_id=p_user_id and achievement_id=a.id) then continue; end if;
+   n:=0;
+   if a.achievement_type='registration_count' then
+     select count(*) into n from public.competition_registrations where user_id=p_user_id and status in ('active','pending','approved');
+   elsif a.achievement_type='result_place' then
+     select count(*) into n from public.competition_results where user_id=p_user_id and place=1;
+   elsif a.achievement_type='points' then n:=coalesce(pts,0);
+   elsif a.achievement_type='active_days' then n:=days;
+   elsif a.achievement_type='login_streak' then n:=streak;
+   elsif a.achievement_type='registration_streak' then
+     select count(*) into n from public.growth_activity_days d where d.user_id=p_user_id and d.activity_date >= current_date-6;
+   end if;
+   if n>=a.requirement_count then
+     insert into public.growth_user_achievements(user_id,achievement_id) values(p_user_id,a.id) on conflict do nothing;
+     if found then
+       unlocked:=unlocked+1;
+       if a.reward_points>0 then perform public.award_growth_points(p_user_id,a.reward_points,'解鎖成就：'||a.title,'achievement',a.id::text,'achievement:'||a.id::text||':'||p_user_id::text,null); end if;
+     end if;
+   end if;
+ end loop;
+ return unlocked;
+end; $$;
+revoke all on function public.check_growth_achievements(uuid) from public;
+grant execute on function public.check_growth_achievements(uuid) to authenticated;
+
+-- Seed two examples for the new system; existing data is preserved.
+insert into public.growth_achievements(code,title,description,achievement_type,requirement_count,reward_points,icon,rarity,hidden,active)
+values
+('active_7_days','活躍一週','累積 7 天活躍紀錄。', 'active_days',7,20,'🔥','rare',false,true),
+('secret_midnight','？？？','這是一個神秘的彩蛋成就。', 'login_streak',3,50,'🥚','legendary',true,true)
+on conflict(code) do nothing;
 
 notify pgrst, 'reload schema';
