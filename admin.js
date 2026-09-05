@@ -54,6 +54,13 @@ async function createVisitor(){
 }
 
 async function saveVisitorNickname(id){const el=document.querySelector('[data-vnick="'+CSS.escape(id)+'"]');const nickname=el?.value.trim()||'';if(!nickname){alert('請輸入暱稱。');return}const r=await fetch(SUPABASE_URL+'/rest/v1/profiles?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({nickname})});if(!r.ok){const d=await r.json().catch(()=>({}));alert('儲存暱稱失敗：'+(d.message||d.hint||('HTTP '+r.status)));return}await visitors()}
+
+async function createNotifications(rows){
+  if(!rows.length)return;
+  const r=await fetch(SUPABASE_URL+'/rest/v1/notifications',{method:'POST',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify(rows)});
+  if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.message||d.hint||('通知建立失敗 HTTP '+r.status));}
+}
+
 async function notifications(){
   if(!$('adminNotifications')||!configured()||!localStorage.getItem('access_token'))return;
   const r=await fetch(SUPABASE_URL+'/rest/v1/notifications?select=*&order=created_at.desc',{headers:auth()});
@@ -104,19 +111,20 @@ async function createCoupon(){
   if(!title||!code){msg('couponMsg','請至少填寫優惠券名稱與優惠碼。');return}
   const body={title,description,code,discount:discount||null,expires_at:expires?expires+'T23:59:59Z':null};
   try{
+    let targets=[];
     if(target==='all'){
       const vr=await fetch(SUPABASE_URL+'/rest/v1/visitor_accounts?select=id&active=eq.true',{headers:auth()});
-      const visitors=vr.ok?await vr.json():[];
-      if(!visitors.length){msg('couponMsg','目前沒有啟用中的訪客。');return}
-      body.user_id=undefined;
-      const rows=visitors.map(v=>({...body,user_id:v.id}));
+      targets=vr.ok?await vr.json():[];
+      if(!targets.length){msg('couponMsg','目前沒有啟用中的訪客。');return}
+      const rows=targets.map(v=>({...body,user_id:v.id}));
       const r=await fetch(SUPABASE_URL+'/rest/v1/coupons',{method:'POST',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify(rows)});
       if(!r.ok)throw new Error('發送失敗 HTTP '+r.status);
     }else{
-      body.user_id=target;
+      targets=[{id:target}]; body.user_id=target;
       const r=await fetch(SUPABASE_URL+'/rest/v1/coupons',{method:'POST',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify(body)});
       if(!r.ok)throw new Error('發送失敗 HTTP '+r.status);
     }
+    try{await createNotifications(targets.map(v=>({user_id:v.id,type:'優惠券',title:'🎟️ 新優惠券已送達',content:title+(discount?'｜'+discount:'')+(expires?'｜有效至 '+expires:'')})))}catch(e){console.error('優惠券通知建立失敗:',e)}
     msg('couponMsg','✅ 優惠券已發送。');
     ['couponTitle','couponDescription','couponCode','couponDiscount','couponExpires'].forEach(id=>$(id).value='');
     await coupons();
@@ -166,7 +174,7 @@ async function deleteQuickLink(id){
 }
 
 async function tickets(){if(!$('ticketList')||!configured()||!localStorage.getItem('access_token'))return;const r=await fetch(SUPABASE_URL+'/rest/v1/support_tickets?select=*&order=created_at.desc',{headers:auth()});const a=r.ok?await r.json():[];$('ticketList').innerHTML=a.map(t=>'<article class="notice"><div class="date">'+esc(t.status)+' · '+esc(String(t.created_at).slice(0,16).replace('T',' '))+'</div><h3>'+esc(t.subject)+'</h3><p>'+esc(t.message).replace(/\n/g,'<br>')+'</p><label>管理員回覆<textarea data-reply="'+t.id+'" rows="4">'+esc(t.admin_reply||'')+'</textarea></label><button data-replybtn="'+t.id+'">💬 儲存回覆</button></article>').join('')||'<div class="empty">目前沒有客服訊息。</div>';document.querySelectorAll('[data-replybtn]').forEach(b=>b.onclick=()=>replyTicket(b.dataset.replybtn))}
-async function replyTicket(id){const ta=document.querySelector('[data-reply="'+CSS.escape(id)+'"]');const reply=ta?ta.value:'';const r=await fetch(SUPABASE_URL+'/rest/v1/support_tickets?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({admin_reply:reply,status:reply?'answered':'open'})});alert(r.ok?'已儲存回覆。':'儲存失敗。');if(r.ok)await tickets()}
+async function replyTicket(id){const ta=document.querySelector('[data-reply="'+CSS.escape(id)+'"]');const reply=ta?ta.value.trim():'';const old=await fetch(SUPABASE_URL+'/rest/v1/support_tickets?id=eq.'+encodeURIComponent(id)+'&select=id,user_id,admin_reply',{headers:auth()});const ticket=(old.ok?(await old.json()):[])[0];const r=await fetch(SUPABASE_URL+'/rest/v1/support_tickets?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({admin_reply:reply,status:reply?'answered':'open'})});if(r.ok&&reply&&ticket?.user_id&&reply!==String(ticket.admin_reply||'')){try{await createNotifications([{user_id:ticket.user_id,type:'客服',title:'💬 客服已有新回覆',content:'你的客服問題已有管理員回覆，請到「我的 → 我的客服」查看。'}])}catch(e){console.error(e)}}alert(r.ok?'已儲存回覆。':'儲存失敗。');if(r.ok)await tickets()}
 
 function clearCompetition(){
   if($('competitionId'))$('competitionId').value='';
@@ -338,6 +346,8 @@ async function loadCompetition(id){
 }
 async function setCompetitionPublished(id,published){
   if(!id){alert('找不到比賽 ID，無法更新公布狀態。');return}
+  const beforeR=await fetch(SUPABASE_URL+'/rest/v1/competitions?id=eq.'+encodeURIComponent(id)+'&select=id,name,published',{headers:auth()});
+  const before=(beforeR.ok?(await beforeR.json()):[])[0];
   const body=published?{published:true}:{published:false};
   try{
     const r=await fetch(SUPABASE_URL+'/rest/v1/competitions?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify(body)});
@@ -350,6 +360,13 @@ async function setCompetitionPublished(id,published){
       const pt=new Date(row.published_at).getTime();
       if(!Number.isFinite(pt)||pt>Date.now()+5000)throw new Error('資料庫的 published_at 仍是未來時間：'+row.published_at);
       msg('competitionMsg','📢 已立即公布！公布時間由資料庫自動設定。');
+      if(before?.published!==true){
+        try{
+          const vr=await fetch(SUPABASE_URL+'/rest/v1/visitor_accounts?select=id&active=eq.true',{headers:auth()});
+          const targets=vr.ok?await vr.json():[];
+          if(targets.length)await createNotifications(targets.map(v=>({user_id:v.id,type:'比賽',title:'🏆 新比賽／活動已公布',content:(before.name||'比賽')+' 已公布，歡迎到「🏆 歷屆成績」查看。'})));
+        }catch(e){console.error('比賽通知建立失敗:',e)}
+      }
     }else{
       if(row&&(row.published!==false||row.published_at!==null))throw new Error('取消公布沒有成功寫入。');
       msg('competitionMsg','🔒 已取消公布。');

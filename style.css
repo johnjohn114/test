@@ -179,3 +179,12 @@ footer{text-align:center;padding:45px 20px;background:#5f4b82;color:#fff;margin-
   .leaderboardMeta{font-size:12px;line-height:1.7}
   .leaderboardStat{min-width:110px}
 }
+
+/* #5 通知系統完善 */
+.panelHeading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px}
+.notificationToolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0 16px;padding:12px 14px;border:1px solid var(--border,#ddd);border-radius:12px;background:var(--soft,#f7f7f7)}
+.notificationToolbar select{min-width:140px}
+.unreadNotice{border-left:4px solid currentColor;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.markRead{margin-top:8px}
+.notificationBadge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:5px;border-radius:999px;font-size:11px;line-height:18px;background:#d33;color:#fff;vertical-align:middle}
+@media (max-width:700px){.panelHeading{align-items:flex-start;flex-direction:column}.notificationToolbar{align-items:stretch;flex-direction:column}.notificationToolbar select{width:100%}}
