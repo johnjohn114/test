@@ -191,6 +191,51 @@ async function loadMyNotifications(){
   document.querySelectorAll('.markRead').forEach(b=>b.onclick=()=>markNotificationRead(b.dataset.notice));
 }
 async function markNotificationRead(id){const r=await fetch(SUPABASE_URL+'/rest/v1/notifications?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({read_at:new Date().toISOString()})});if(r.ok)loadMyNotifications();}
+
+
+function searchTextScore(row, q, fields){
+  const query=q.toLowerCase();
+  let score=0;
+  fields.forEach((key,i)=>{const v=String(row[key]??'').toLowerCase(); if(v.includes(query)) score += i===0?5:2;});
+  return score;
+}
+function searchResultCard(item){
+  const icon=item.type==='news'?'📢':item.type==='product'?'🛍️':'🏆';
+  return '<article class="searchResult"><div class="date">'+icon+' '+esc(item.label)+'</div><h3><a href="'+esc(item.url)+'">'+esc(item.title)+'</a></h3>'+(item.meta?'<p class="searchMeta">'+esc(item.meta)+'</p>':'')+(item.text?'<p>'+esc(item.text).replace(/\n/g,'<br>')+'</p>':'')+'</article>';
+}
+async function runSiteSearch(){
+  const input=$('siteSearchInput'), box=$('searchResults'), count=$('searchCount');
+  if(!input||!box||!configured())return;
+  const q=input.value.trim();
+  if(!q){box.innerHTML='<div class="empty">請輸入關鍵字開始搜尋。</div>';if(count)count.textContent='';return}
+  box.innerHTML='<div class="loading">正在搜尋全站內容…</div>'; if(count)count.textContent='';
+  const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY};
+  const now=encodeURIComponent(new Date().toISOString());
+  const urls={
+    news:SUPABASE_URL+'/rest/v1/announcements?select=id,title,content,date,category,link_url,published_at&published=eq.true&published_at=lte.'+now+'&order=pinned.desc,published_at.desc,created_at.desc&limit=1000',
+    products:SUPABASE_URL+'/rest/v1/products?select=id,name,description,category,price&active=eq.true&order=created_at.desc&limit=1000',
+    competitions:SUPABASE_URL+'/rest/v1/competitions?select=id,name,description,category,event_date&published=eq.true&order=event_date.desc,created_at.desc&limit=1000'
+  };
+  try{
+    const [nr,pr,cr]=await Promise.all(Object.values(urls).map(u=>fetch(u,{headers:h})));
+    const [newsRows,productRows,competitionRows]=await Promise.all([nr.ok?nr.json():[],pr.ok?pr.json():[],cr.ok?cr.json():[]]);
+    const results=[];
+    newsRows.forEach(x=>{const score=searchTextScore(x,q,['title','content','category']);if(score)results.push({score,type:'news',label:x.category||'最新消息',title:x.title,text:x.content,meta:x.date||'',url:x.link_url||('news.html')});});
+    productRows.forEach(x=>{const score=searchTextScore(x,q,['name','description','category']);if(score)results.push({score,type:'product',label:x.category||'商品',title:x.name,text:x.description,meta:x.price!=null?'NT$ '+Number(x.price).toLocaleString():'',url:'products.html'});});
+    competitionRows.forEach(x=>{const score=searchTextScore(x,q,['name','description','category']);if(score)results.push({score,type:'competition',label:x.category||'活動／比賽',title:x.name,text:x.description,meta:x.event_date||'日期未設定',url:'competitions.html?id='+encodeURIComponent(x.id)});});
+    results.sort((a,b)=>b.score-a.score||a.title.localeCompare(b.title,'zh-Hant'));
+    if(count)count.textContent='找到 '+results.length+' 筆結果';
+    box.innerHTML=results.length?results.map(searchResultCard).join(''):'<div class="empty">找不到「'+esc(q)+'」相關內容。<br><small>可以試試商品名稱、活動名稱、公告關鍵字或分類。</small></div>';
+  }catch(e){console.error('全站搜尋失敗:',e);box.innerHTML='<div class="empty">目前無法完成搜尋，請稍後再試。</div>';}
+}
+function initSiteSearch(){
+  const form=$('siteSearchForm'), input=$('siteSearchInput');
+  if(!form||!input)return;
+  const params=new URLSearchParams(location.search); if(params.get('q'))input.value=params.get('q');
+  form.addEventListener('submit',e=>{e.preventDefault();const q=input.value.trim();if(q)history.replaceState(null,'','search.html?q='+encodeURIComponent(q));runSiteSearch();});
+  if(input.value.trim())runSiteSearch();
+}
+
 function showMySection(id){document.querySelectorAll('.myPanel').forEach(x=>x.classList.add('hidden'));$(id)?.classList.remove('hidden');document.querySelectorAll('.mySubnav a').forEach(a=>a.classList.toggle('active',a.dataset.target===id));}
 
-window.addEventListener('DOMContentLoaded',()=>{bindMobileNav();if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();loadQuickLinks();loadCompetitionMenu();if($('competitionList'))loadCompetitionPage();if($('myProfile')&&visitorToken()){loadMyProfile();loadMyCompetitions();loadMyAwards();loadMyNotifications();$('saveMyProfile')?.addEventListener('click',saveMyProfile);$('changeMyPassword')?.addEventListener('click',changeMyPassword);showMySection(location.hash?location.hash.slice(1):'myProfilePanel');document.querySelectorAll('.mySubnav a').forEach(a=>a.addEventListener('click',()=>showMySection(a.dataset.target)));} });
+window.addEventListener('DOMContentLoaded',()=>{bindMobileNav();initSiteSearch();if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();loadQuickLinks();loadCompetitionMenu();if($('competitionList'))loadCompetitionPage();if($('myProfile')&&visitorToken()){loadMyProfile();loadMyCompetitions();loadMyAwards();loadMyNotifications();$('saveMyProfile')?.addEventListener('click',saveMyProfile);$('changeMyPassword')?.addEventListener('click',changeMyPassword);showMySection(location.hash?location.hash.slice(1):'myProfilePanel');document.querySelectorAll('.mySubnav a').forEach(a=>a.addEventListener('click',()=>showMySection(a.dataset.target)));} });
