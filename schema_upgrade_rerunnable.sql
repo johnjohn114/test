@@ -129,6 +129,9 @@ create table if not exists public.coupons (
   created_at timestamptz not null default now()
 );
 
+alter table public.coupons add column if not exists usage_condition text;
+alter table public.coupons add column if not exists used_at timestamptz;
+
 alter table public.coupons enable row level security;
 
 drop policy if exists coupon_owner_read on public.coupons;
@@ -144,6 +147,8 @@ create policy coupon_admin_all on public.coupons
 
 create index if not exists coupons_user_id_idx on public.coupons(user_id);
 create index if not exists coupons_expires_at_idx on public.coupons(expires_at);
+create index if not exists coupons_used_idx on public.coupons(used);
+
 
 
 -- 達人榜：管理員建立比賽、輸入成績，確認後再公布。

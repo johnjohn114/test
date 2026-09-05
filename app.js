@@ -60,18 +60,23 @@ function couponStatus(c){
 }
 function couponCard(c){
   const s=couponStatus(c);
-  return '<article class="couponCard '+s.cls+'"><div class="couponTop"><span>'+esc(s.text)+'</span><span>🎟️</span></div><h3>'+esc(c.title)+'</h3><p>'+esc(c.description||'')+'</p>'+(c.discount?'<strong class="couponDiscount">'+esc(c.discount)+'</strong>':'')+'<div class="couponCode">'+esc(c.code)+'</div><div class="date">'+(c.expires_at?'有效至：'+esc(String(c.expires_at).slice(0,10)):'無期限')+'</div></article>';
+  return '<article class="couponCard '+s.cls+'"><div class="couponTop"><span>'+esc(s.text)+'</span><span>🎟️</span></div><h3>'+esc(c.title)+'</h3><p>'+esc(c.description||'')+'</p>'+(c.discount?'<strong class="couponDiscount">'+esc(c.discount)+'</strong>':'')+(c.usage_condition?'<p class="couponCondition"><b>使用條件：</b>'+esc(c.usage_condition)+'</p>':'')+'<div class="couponCode">'+esc(c.code)+'</div><div class="date">'+(c.expires_at?'有效至：'+esc(String(c.expires_at).slice(0,10)):'無期限')+(c.used_at?' · 使用於：'+esc(String(c.used_at).slice(0,10)):'')+'</div></article>';
+}
+function renderMyCoupons(rows){
+  const box=$('myCoupons'); if(!box)return;
+  const filter=$('couponFilter')?.value||'available';
+  const filtered=rows.filter(c=>{const s=couponStatus(c);return filter==='all'||(filter==='available'&&(s.cls==='available'||s.cls==='soon'))||(filter==='used'&&s.cls==='used')||(filter==='expired'&&s.cls==='expired')});
+  box.innerHTML=filtered.length?filtered.map(couponCard).join(''):'<div class="empty">目前沒有符合條件的優惠券。</div>';
 }
 async function loadMyCoupons(){
   const box=$('myCoupons'), gate=$('couponGate');
   if(!box) return;
-  if(!visitorToken()){
-    box.classList.add('hidden'); gate?.classList.remove('hidden'); return;
-  }
-  gate?.classList.add('hidden'); box.classList.remove('hidden');
+  if(!visitorToken()){box.classList.add('hidden');gate?.classList.remove('hidden');return;}
+  gate?.classList.add('hidden');box.classList.remove('hidden');
   const r=await fetch(SUPABASE_URL+'/rest/v1/coupons?select=*&order=created_at.desc',{headers:auth()});
   const rows=r.ok?await r.json():[];
-  box.innerHTML=rows.length?rows.map(couponCard).join(''):'<div class="empty">目前沒有優惠券。</div>';
+  window.__myCoupons=rows; renderMyCoupons(rows);
+  const f=$('couponFilter'); if(f&&!f.dataset.bound){f.dataset.bound='1';f.addEventListener('change',()=>renderMyCoupons(window.__myCoupons||[]));}
 }
 
 async function loadCompetitionMenu(){

@@ -173,16 +173,24 @@ async function coupons(){
   const r=await fetch(SUPABASE_URL+'/rest/v1/coupons?select=*,visitor_accounts(email)&order=created_at.desc',{headers:auth()});
   const a=r.ok?await r.json():[]; window.__adminCoupons=a; renderAdminCoupons();
 }
+function adminCouponStatus(c){if(c.used)return 'used';if(c.expires_at&&new Date(c.expires_at)<new Date())return 'expired';return 'available'}
 function renderAdminCoupons(){
-  const q=($('couponSearch')?.value||'').trim().toLowerCase(); const a=window.__adminCoupons||[];
-  const rows=a.filter(c=>!q||[c.title,c.code,c.visitor_accounts?.email].some(v=>String(v||'').toLowerCase().includes(q)));
-  $('adminCoupons').innerHTML=rows.map(c=>'<article class="notice"><div class="date">'+esc(c.visitor_accounts?.email||'')+' · '+esc(c.used?'⚫ 已使用':(c.expires_at&&new Date(c.expires_at)<new Date()?'⚪ 已過期':'🟢 可使用'))+' · '+esc(c.expires_at?String(c.expires_at).slice(0,10):'無期限')+'</div><h3>🎟️ '+esc(c.title)+'</h3><p>'+esc(c.description||'')+'</p><p><b>優惠碼：</b>'+esc(c.code)+(c.discount?'　<b>'+esc(c.discount)+'</b>':'')+'</p><button data-cdel="'+esc(c.id)+'">🗑️ 刪除優惠券</button></article>').join('')||'<div class="empty">目前沒有符合條件的優惠券。</div>';
+  const q=($('couponSearch')?.value||'').trim().toLowerCase(), filter=$('couponStatusFilter')?.value||'all', a=window.__adminCoupons||[];
+  const rows=a.filter(c=>(!q||[c.title,c.code,c.visitor_accounts?.email].some(v=>String(v||'').toLowerCase().includes(q)))&&(filter==='all'||adminCouponStatus(c)===filter));
+  $('adminCoupons').innerHTML=rows.map(c=>{const st=adminCouponStatus(c);const label=st==='used'?'⚪ 已使用':st==='expired'?'🔴 已過期':'🟢 可使用';return '<article class="notice"><div class="date">'+esc(c.visitor_accounts?.email||'')+' · '+label+' · '+esc(c.expires_at?String(c.expires_at).slice(0,10):'無期限')+'</div><h3>🎟️ '+esc(c.title)+'</h3><p>'+esc(c.description||'')+'</p>'+(c.usage_condition?'<p><b>使用條件：</b>'+esc(c.usage_condition)+'</p>':'')+'<p><b>優惠碼：</b>'+esc(c.code)+(c.discount?'　<b>'+esc(c.discount)+'</b>':'')+'</p>'+(c.used_at?'<p><b>使用日期：</b>'+esc(String(c.used_at).slice(0,10))+'</p>':'')+(st==='available'?'<button data-cuse="'+esc(c.id)+'">✓ 標記已使用</button> ':'')+'<button data-cdel="'+esc(c.id)+'">🗑️ 刪除優惠券</button></article>'}).join('')||'<div class="empty">目前沒有符合條件的優惠券。</div>';
   document.querySelectorAll('[data-cdel]').forEach(b=>b.onclick=()=>deleteCoupon(b.dataset.cdel));
+  document.querySelectorAll('[data-cuse]').forEach(b=>b.onclick=()=>markCouponUsed(b.dataset.cuse));
+}
+async function markCouponUsed(id){
+  if(!confirm('確定要將這張優惠券標記為已使用？'))return;
+  const r=await fetch(SUPABASE_URL+'/rest/v1/coupons?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({used:true,used_at:new Date().toISOString()})});
+  if(!r.ok){alert('標記失敗：請確認 coupons 權限或資料庫欄位。');return}
+  await coupons();
 }
 async function createCoupon(){
-  const title=$('couponTitle').value.trim(), description=$('couponDescription').value.trim(), code=$('couponCode').value.trim(), discount=$('couponDiscount').value.trim(), expires=$('couponExpires').value, target=$('couponVisitor').value;
+  const title=$('couponTitle').value.trim(), description=$('couponDescription').value.trim(), usage_condition=$('couponCondition').value.trim(), code=$('couponCode').value.trim(), discount=$('couponDiscount').value.trim(), expires=$('couponExpires').value, target=$('couponVisitor').value;
   if(!title||!code){msg('couponMsg','請至少填寫優惠券名稱與優惠碼。');return}
-  const body={title,description,code,discount:discount||null,expires_at:expires?expires+'T23:59:59Z':null};
+  const body={title,description,usage_condition:usage_condition||null,code,discount:discount||null,expires_at:expires?expires+'T23:59:59Z':null};
   try{
     let targets=[];
     if(target==='all'){
@@ -199,7 +207,7 @@ async function createCoupon(){
     }
     try{await createNotifications(targets.map(v=>({user_id:v.id,type:'優惠券',title:'🎟️ 新優惠券已送達',content:title+(discount?'｜'+discount:'')+(expires?'｜有效至 '+expires:'')})))}catch(e){console.error('優惠券通知建立失敗:',e)}
     msg('couponMsg','✅ 優惠券已發送。');
-    ['couponTitle','couponDescription','couponCode','couponDiscount','couponExpires'].forEach(id=>$(id).value='');
+    ['couponTitle','couponDescription','couponCondition','couponCode','couponDiscount','couponExpires'].forEach(id=>$(id).value='');
     await coupons();
   }catch(e){msg('couponMsg','❌ '+e.message)}
 }
@@ -547,7 +555,7 @@ function bindMobileAdminNav(){
 function bind(){
   if($('newsSearch'))$('newsSearch').addEventListener('input',renderAdminNews); if($('newsStatusFilter'))$('newsStatusFilter').addEventListener('change',renderAdminNews);
   if($('productSearch'))$('productSearch').addEventListener('input',renderAdminProducts); if($('productStatusFilter'))$('productStatusFilter').addEventListener('change',renderAdminProducts);
-  if($('couponSearch'))$('couponSearch').addEventListener('input',renderAdminCoupons);
+  if($('couponSearch'))$('couponSearch').addEventListener('input',renderAdminCoupons);if($('couponStatusFilter'))$('couponStatusFilter').addEventListener('change',renderAdminCoupons);
   if($('supportSearch'))$('supportSearch').addEventListener('input',renderTickets); if($('supportStatusFilter'))$('supportStatusFilter').addEventListener('change',renderTickets);
   if($('competitionSearch'))$('competitionSearch').addEventListener('input',renderAdminCompetitions); if($('competitionStatusFilter'))$('competitionStatusFilter').addEventListener('change',renderAdminCompetitions); if($('competitionCategoryFilter'))$('competitionCategoryFilter').addEventListener('change',renderAdminCompetitions); if($('registrationSearch'))$('registrationSearch').addEventListener('input',renderCompetitionRegistrations); if($('exportCompetitionRegistrations'))$('exportCompetitionRegistrations').onclick=exportCompetitionRegistrations; if($('registrationStatusFilter'))$('registrationStatusFilter').addEventListener('change',renderCompetitionRegistrations);
   if($('loginButton'))$('loginButton').onclick=login;if($('refreshDashboard'))$('refreshDashboard').onclick=dashboard;if($('logoutButton'))$('logoutButton').onclick=logout;if($('saveContent'))$('saveContent').onclick=save;if($('publishButton'))$('publishButton').onclick=publish;if($('saveProduct'))$('saveProduct').onclick=saveProduct;if($('clearProduct'))$('clearProduct').onclick=clearProduct;if($('createVisitor'))$('createVisitor').onclick=createVisitor;if($('setSharedVisitorPassword'))$('setSharedVisitorPassword').onclick=setSharedVisitorPassword;if($('createCoupon'))$('createCoupon').onclick=createCoupon;if($('createNotification'))$('createNotification').onclick=createNotification;if($('addCompetitionResult'))$('addCompetitionResult').onclick=()=>addCompetitionResult();if($('saveCompetition'))$('saveCompetition').onclick=saveCompetition;if($('publishCompetition'))$('publishCompetition').onclick=async()=>{const ok=await saveCompetition();const id=$('competitionId').value;if(ok&&id)await setCompetitionPublished(id,true)};if($('unpublishCompetition'))$('unpublishCompetition').onclick=async()=>{const id=$('competitionId').value;if(id)await setCompetitionPublished(id,false)};if($('clearCompetition'))$('clearCompetition').onclick=clearCompetition;if($('addCompetitionCategory'))$('addCompetitionCategory').onclick=addCompetitionCategory;if($('saveQuickLink'))$('saveQuickLink').onclick=saveQuickLink;if($('clearQuickLink'))$('clearQuickLink').onclick=clearQuickLink;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabPanel').forEach(x=>x.classList.add('hidden'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));$(b.dataset.tab).classList.remove('hidden');b.classList.add('active');if(b.dataset.tab==='dashboardTab')dashboard();if(b.dataset.tab==='newsTab')news();if(b.dataset.tab==='productTab')products();if(b.dataset.tab==='visitorTab')visitors();if(b.dataset.tab==='couponTab')coupons();if(b.dataset.tab==='competitionTab'){competitionCategories();competitions();if(!$('competitionResults').children.length)addCompetitionResult()}if(b.dataset.tab==='quickLinkTab')quickLinks();if(b.dataset.tab==='supportTab')tickets();if(b.dataset.tab==='notificationTab')notifications()})}
