@@ -633,6 +633,12 @@ create table if not exists public.growth_tasks (
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
+alter table public.growth_tasks add column if not exists cycle_type text not null default 'one_time';
+alter table public.growth_tasks add column if not exists start_at timestamptz;
+alter table public.growth_tasks add column if not exists end_at timestamptz;
+alter table public.growth_tasks drop constraint if exists growth_tasks_cycle_type_check;
+alter table public.growth_tasks add constraint growth_tasks_cycle_type_check check(cycle_type in ('one_time','daily','weekly'));
+
 insert into public.growth_tasks(code,title,description,task_type,requirement_count,reward_points) values
  ('complete_profile','完成會員資料','完成會員暱稱設定', 'profile_complete',1,20),
  ('first_registration','第一次報名','第一次成功報名活動／比賽', 'first_registration',1,20),
@@ -647,6 +653,10 @@ create table if not exists public.growth_user_tasks (
   primary key(user_id,task_id)
 );
 create index if not exists growth_user_tasks_user_idx on public.growth_user_tasks(user_id);
+alter table public.growth_user_tasks add column if not exists cycle_key text not null default 'once';
+alter table public.growth_user_tasks drop constraint if exists growth_user_tasks_pkey;
+alter table public.growth_user_tasks add constraint growth_user_tasks_pkey primary key(user_id,task_id,cycle_key);
+create index if not exists growth_user_tasks_cycle_idx on public.growth_user_tasks(user_id,task_id,cycle_key);
 
 create table if not exists public.growth_achievements (
   id uuid primary key default gen_random_uuid(),
@@ -659,6 +669,12 @@ create table if not exists public.growth_achievements (
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
+alter table public.growth_achievements add column if not exists icon text not null default '🏆';
+alter table public.growth_achievements add column if not exists rarity text not null default 'common';
+alter table public.growth_achievements add column if not exists hidden boolean not null default false;
+alter table public.growth_achievements drop constraint if exists growth_achievements_rarity_check;
+alter table public.growth_achievements add constraint growth_achievements_rarity_check check(rarity in ('common','rare','epic','legendary'));
+
 insert into public.growth_achievements(code,title,description,achievement_type,requirement_count,reward_points) values
  ('first_registration','初次參賽','完成第一次活動／比賽報名','registration_count',1,10),
  ('first_champion','首次冠軍','取得一次第一名','result_place',1,30),
@@ -761,22 +777,24 @@ revoke all on function public.award_growth_points(uuid,integer,text,text,text,te
 
 create or replace function public.complete_growth_task(p_task_code text)
 returns boolean language plpgsql security definer set search_path=public as $$
-declare uid uuid:=auth.uid(); t growth_tasks%rowtype; n integer:=0; done boolean:=false;
+declare uid uuid:=auth.uid(); t growth_tasks%rowtype; n integer:=0; cycle text; completed boolean:=false;
 begin
  if uid is null then raise exception '請先登入'; end if;
- select * into t from public.growth_tasks where code=p_task_code and active=true;
+ select * into t from public.growth_tasks where code=p_task_code and active=true and (start_at is null or now()>=start_at) and (end_at is null or now()<=end_at);
  if t.id is null then raise exception '找不到任務'; end if;
- if exists(select 1 from public.growth_user_tasks where user_id=uid and task_id=t.id and completed_at is not null) then return true; end if;
+ cycle:=case when t.cycle_type='daily' then to_char(now(),'YYYY-MM-DD') when t.cycle_type='weekly' then to_char(date_trunc('week',now()),'YYYY-MM-DD') else 'once' end;
+ select exists(select 1 from public.growth_user_tasks where user_id=uid and task_id=t.id and cycle_key=cycle and completed_at is not null) into completed;
+ if completed then return true; end if;
  if t.task_type='profile_complete' then select count(*) into n from public.profiles where id=uid and coalesce(nullif(trim(nickname),''),'')<>'';
  elsif t.task_type='first_registration' then select count(*) into n from public.competition_registrations where user_id=uid and status in ('active','pending','approved');
  elsif t.task_type='first_result' then select count(*) into n from public.competition_results r join public.competitions c on c.id=r.competition_id where r.user_id=uid and c.published=true;
- elsif t.task_type='registration_count' then select count(*) into n from public.competition_registrations where user_id=uid and status in ('active','pending','approved');
- elsif t.task_type='result_count' then select count(*) into n from public.competition_results r join public.competitions c on c.id=r.competition_id where r.user_id=uid and c.published=true;
+ elsif t.task_type='registration_count' then select count(*) into n from public.competition_registrations where user_id=uid and status in ('active','pending','approved') and (t.cycle_type='one_time' or created_at >= case when t.cycle_type='daily' then date_trunc('day',now()) else date_trunc('week',now()) end);
+ elsif t.task_type='result_count' then select count(*) into n from public.competition_results r join public.competitions c on c.id=r.competition_id where r.user_id=uid and c.published=true and (t.cycle_type='one_time' or r.created_at >= case when t.cycle_type='daily' then date_trunc('day',now()) else date_trunc('week',now()) end);
  end if;
- insert into public.growth_user_tasks(user_id,task_id,progress) values(uid,t.id,least(n,t.requirement_count)) on conflict(user_id,task_id) do update set progress=excluded.progress;
+ insert into public.growth_user_tasks(user_id,task_id,cycle_key,progress) values(uid,t.id,cycle,least(n,t.requirement_count)) on conflict(user_id,task_id,cycle_key) do update set progress=excluded.progress;
  if n>=t.requirement_count then
-   update public.growth_user_tasks set completed_at=now(),progress=t.requirement_count where user_id=uid and task_id=t.id and completed_at is null;
-   if t.reward_points>0 then perform public.award_growth_points(uid,t.reward_points,'完成任務：'||t.title,'task',t.id::text,'task:'||t.id::text||':'||uid::text,null); end if;
+   update public.growth_user_tasks set completed_at=now(),progress=t.requirement_count where user_id=uid and task_id=t.id and cycle_key=cycle and completed_at is null;
+   if t.reward_points>0 then perform public.award_growth_points(uid,t.reward_points,'完成任務：'||t.title,'task',t.id::text, 'task:'||t.id::text||':'||uid::text||':'||cycle,null); end if;
    return true;
  end if;
  return false;
