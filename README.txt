@@ -97,3 +97,6 @@ Access-Control-Allow-Headers: authorization, x-client-info, apikey, content-type
 - 會員 UUID、比賽成績、優惠券、客服等資料關聯不會改變。
 - 之後改用交易內可回滾的 member_no_counter：建立失敗不會消耗編號，刪除會員也不會回收編號。
 - 請在 Supabase SQL Editor 重新執行本版 schema_upgrade_rerunnable.sql；只需執行一次，之後即可正常建立新會員。
+
+
+#4 達人榜升級：公開歷屆成績自動計算達人榜；積分 1名=5、2名=3、3名=2、其他名次=1；同分依冠軍數、亞軍數、季軍數、參賽場次排序。達人榜與歷屆成績整合於同一頁，並放在「🏆 歷屆成績」子選單。

@@ -145,3 +145,37 @@ footer{text-align:center;padding:45px 20px;background:#5f4b82;color:#fff;margin-
 .searchResult h3 a:hover{text-decoration:underline}
 .searchMeta{color:#667085;font-size:14px}
 @media(max-width:640px){.siteSearchForm{flex-direction:column}.siteSearchForm button{width:100%}}
+
+
+/* #4 達人榜升級 */
+.leaderboardSection{
+  margin:0 0 28px;
+  padding:24px;
+  border:1px solid rgba(37,99,235,.16);
+  border-radius:20px;
+  background:linear-gradient(180deg,rgba(37,99,235,.06),rgba(255,255,255,.92));
+}
+.leaderboardHeader{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:18px}
+.leaderboardHeader h2{margin:4px 0 6px}
+.leaderboardSummary{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.leaderboardStat{min-width:130px;padding:12px 16px;border-radius:14px;background:#fff;border:1px solid rgba(0,0,0,.07);display:flex;flex-direction:column}
+.leaderboardStat b{font-size:22px;line-height:1.1}
+.leaderboardStat span{font-size:13px;opacity:.72;margin-top:4px}
+.leaderboardRow{
+  display:grid;grid-template-columns:100px 1fr;gap:14px;align-items:center;
+  padding:15px 16px;margin:10px 0;border-radius:15px;background:#fff;
+  border:1px solid rgba(0,0,0,.07);box-shadow:0 4px 14px rgba(0,0,0,.04)
+}
+.leaderboardRow.topRank{border-width:1.5px}
+.leaderboardRank{font-size:17px;white-space:nowrap}
+.leaderboardPlayer h3{margin:0 0 5px;font-size:18px}
+.leaderboardMeta{font-size:13px;opacity:.76}
+.leaderboardMore{margin-top:12px}
+@media(max-width:640px){
+  .leaderboardSection{padding:16px;border-radius:16px}
+  .leaderboardRow{grid-template-columns:72px 1fr;padding:13px 12px;gap:8px}
+  .leaderboardRank{font-size:15px}
+  .leaderboardPlayer h3{font-size:16px}
+  .leaderboardMeta{font-size:12px;line-height:1.7}
+  .leaderboardStat{min-width:110px}
+}
