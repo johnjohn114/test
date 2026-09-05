@@ -757,7 +757,7 @@ begin
  return new_points;
 end; $$;
 revoke all on function public.award_growth_points(uuid,integer,text,text,text,text,uuid) from public;
-grant execute on function public.award_growth_points(uuid,integer,text,text,text,text,uuid) to authenticated;
+revoke all on function public.award_growth_points(uuid,integer,text,text,text,text,uuid) from authenticated;
 
 create or replace function public.complete_growth_task(p_task_code text)
 returns boolean language plpgsql security definer set search_path=public as $$
