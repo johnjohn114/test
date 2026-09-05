@@ -475,6 +475,7 @@ create table if not exists public.notifications (
 );
 alter table public.notifications add column if not exists type text not null default '一般';
 alter table public.notifications add column if not exists read_at timestamptz;
+alter table public.notifications add column if not exists ticket_id uuid references public.support_tickets(id) on delete set null;
 alter table public.notifications enable row level security;
 drop policy if exists notification_owner_read on public.notifications;
 drop policy if exists notification_owner_update on public.notifications;
@@ -489,6 +490,7 @@ for delete to authenticated using(user_id=auth.uid());
 create policy notification_admin_all on public.notifications
 for all to authenticated using(public.is_admin()) with check(public.is_admin());
 create index if not exists notifications_user_idx on public.notifications(user_id, created_at desc);
+create index if not exists notifications_ticket_idx on public.notifications(ticket_id);
 
 -- #12 線上報名系統 v1
 create table if not exists public.competition_registrations (

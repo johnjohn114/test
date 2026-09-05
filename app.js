@@ -459,8 +459,9 @@ function renderMyNotifications(){
   const rows=filter==='unread'?myNotificationRows.filter(x=>!x.read_at):filter==='read'?myNotificationRows.filter(x=>x.read_at):myNotificationRows;
   const unread=myNotificationRows.filter(x=>!x.read_at).length;
   const summary=$('notificationSummary'); if(summary)summary.textContent='共 '+myNotificationRows.length+' 則通知 · 未讀 '+unread+' 則';
-  box.innerHTML=rows.length?rows.map(x=>'<article class="notice '+(x.read_at?'':'unreadNotice')+'"><div class="date">'+(x.read_at?'':'🔴 未讀 · ')+notificationIcon(x.type)+' '+esc(x.type||'一般')+' · '+esc(String(x.created_at).slice(0,16).replace('T',' '))+'</div><h3>'+esc(x.title)+'</h3><p>'+esc(x.content).replace(/\n/g,'<br>')+'</p>'+(!x.read_at?'<button class="markRead" data-notice="'+esc(x.id)+'">標記已讀</button>':'')+'</article>').join(''):'<div class="empty">'+(filter==='unread'?'目前沒有未讀通知。':filter==='read'?'目前沒有已讀通知。':'目前沒有通知。')+'</div>';
+  box.innerHTML=rows.length?rows.map(x=>'<article class="notice '+(x.read_at?'':'unreadNotice')+'"><div class="date">'+(x.read_at?'':'🔴 未讀 · ')+notificationIcon(x.type)+' '+esc(x.type||'一般')+' · '+esc(String(x.created_at).slice(0,16).replace('T',' '))+'</div><h3>'+esc(x.title)+'</h3><p>'+esc(x.content).replace(/\n/g,'<br>')+'</p>'+((x.type==='客服'&&x.ticket_id)?'<button class="btn secondary notificationTicketBtn" type="button" data-ticket-notice="'+esc(x.ticket_id)+'">💬 查看客服案件</button> ':'')+(!x.read_at?'<button class="markRead" data-notice="'+esc(x.id)+'">標記已讀</button>':'')+'</article>').join(''):'<div class="empty">'+(filter==='unread'?'目前沒有未讀通知。':filter==='read'?'目前沒有已讀通知。':'目前沒有通知。')+'</div>';
   document.querySelectorAll('.markRead').forEach(b=>b.onclick=()=>markNotificationRead(b.dataset.notice));
+  document.querySelectorAll('[data-ticket-notice]').forEach(b=>b.onclick=async()=>{await markNotificationRead(b.closest('.notice')?.querySelector('[data-notice]')?.dataset.notice||''); showMySection('mySupportPanel'); location.hash='mySupportPanel';});
 }
 async function loadMyNotifications(){
   const box=$('myNotifications'); if(!box||!visitorToken())return;
