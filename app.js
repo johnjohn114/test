@@ -50,7 +50,19 @@ async function loadAllNews(category='all'){if(!configured())return;const h={apik
 async function loadProducts(){if(!configured())return;const h={apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY};const r=await fetch(SUPABASE_URL+'/rest/v1/products?select=*&active=eq.true&order=created_at.desc',{headers:h});const rows=r.ok?await r.json():[];if($('productGrid'))$('productGrid').innerHTML=rows.length?rows.map(productCard).join(''):'<div class="empty">目前沒有上架商品。</div>'}
 function productCard(p){return '<article class="productCard">'+(p.image_url?'<img src="'+esc(p.image_url)+'" alt="'+esc(p.name)+'">':'<div class="productImage">📦</div>')+'<div class="productBody"><div class="date">'+esc(p.category||'商品')+'</div><h3>'+esc(p.name)+'</h3><p>'+esc(p.description||'')+'</p><strong>NT$ '+Number(p.price||0).toLocaleString()+'</strong></div></article>'}
 async function sendTicket(){if(!visitorToken()){show('ticketMsg','請先登入訪客帳號。');return}const subject=$('ticketSubject').value.trim(),message=$('ticketMessage').value.trim();if(!subject||!message){show('ticketMsg','請填寫主旨與內容。');return}const r=await fetch(SUPABASE_URL+'/rest/v1/support_tickets',{method:'POST',headers:auth(),body:JSON.stringify({subject,message})});show('ticketMsg',r.ok?'✅ 已送出，管理員會處理。':'❌ 送出失敗，請稍後再試。');if(r.ok){$('ticketSubject').value='';$('ticketMessage').value='';await loadMyTickets()}}
-async function loadMyTickets(){if(!$('myTickets')||!visitorToken())return;const r=await fetch(SUPABASE_URL+'/rest/v1/support_tickets?select=*&order=created_at.desc',{headers:auth()});const rows=r.ok?await r.json():[];$('myTickets').innerHTML=rows.length?rows.map(t=>'<article class="notice"><div class="date">'+esc(t.status)+' · '+esc(String(t.created_at).slice(0,10))+'</div><h3>'+esc(t.subject)+'</h3><p>'+esc(t.message).replace(/\n/g,'<br>')+'</p>'+(t.admin_reply?'<hr><p><b>管理員回覆：</b>'+esc(t.admin_reply).replace(/\n/g,'<br>')+'</p>':'')+'</article>').join(''):'<div class="empty">尚無客服紀錄。</div>'}
+function supportStatusText(s){return s==='closed'?'⚪ 已結案':s==='answered'?'🟢 已回覆':'🟠 處理中'}
+async function loadMyTickets(){
+  if(!$('myTickets')||!visitorToken())return;
+  const r=await fetch(SUPABASE_URL+'/rest/v1/support_tickets?select=*&order=created_at.desc',{headers:auth()});
+  const rows=r.ok?await r.json():[];
+  $('myTickets').innerHTML=rows.length?rows.map(t=>{
+    const reply=t.admin_reply?'<hr><p><b>管理員回覆：</b>'+esc(t.admin_reply).replace(/\n/g,'<br>')+'</p>':'<p class="sub">等待管理員回覆。</p>';
+    const action=t.status!=='closed'?'<div class="supportActions"><button class="btn secondary" type="button" data-close-ticket="'+esc(t.id)+'">✓ 我已解決</button></div>':'';
+    return '<article class="notice supportTicketCard"><div class="date">'+supportStatusText(t.status)+' · '+esc(String(t.updated_at||t.created_at).slice(0,16).replace('T',' '))+'</div><h3>'+esc(t.subject)+'</h3><p>'+esc(t.message).replace(/\n/g,'<br>')+'</p>'+reply+action+'</article>';
+  }).join(''):'<div class="empty">尚無客服紀錄。</div>';
+  document.querySelectorAll('[data-close-ticket]').forEach(b=>b.addEventListener('click',()=>closeMyTicket(b.dataset.closeTicket)));
+}
+async function closeMyTicket(id){if(!visitorToken()||!confirm('確定要將此客服案件結案嗎？'))return;const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/close_my_support_ticket',{method:'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify({p_ticket_id:id})});let ok=false;if(r.ok){const d=await r.json().catch(()=>false);ok=d===true||(Array.isArray(d)&&d[0]===true)}if(ok){await loadMyTickets();await loadMyOverview()}else alert('結案失敗，請稍後再試。')}
 
 function couponStatus(c){
   if(c.used) return {text:'⚫ 已使用',cls:'used'};
@@ -60,23 +72,18 @@ function couponStatus(c){
 }
 function couponCard(c){
   const s=couponStatus(c);
-  return '<article class="couponCard '+s.cls+'"><div class="couponTop"><span>'+esc(s.text)+'</span><span>🎟️</span></div><h3>'+esc(c.title)+'</h3><p>'+esc(c.description||'')+'</p>'+(c.discount?'<strong class="couponDiscount">'+esc(c.discount)+'</strong>':'')+(c.usage_condition?'<p class="couponCondition"><b>使用條件：</b>'+esc(c.usage_condition)+'</p>':'')+'<div class="couponCode">'+esc(c.code)+'</div><div class="date">'+(c.expires_at?'有效至：'+esc(String(c.expires_at).slice(0,10)):'無期限')+(c.used_at?' · 使用於：'+esc(String(c.used_at).slice(0,10)):'')+'</div></article>';
-}
-function renderMyCoupons(rows){
-  const box=$('myCoupons'); if(!box)return;
-  const filter=$('couponFilter')?.value||'available';
-  const filtered=rows.filter(c=>{const s=couponStatus(c);return filter==='all'||(filter==='available'&&(s.cls==='available'||s.cls==='soon'))||(filter==='used'&&s.cls==='used')||(filter==='expired'&&s.cls==='expired')});
-  box.innerHTML=filtered.length?filtered.map(couponCard).join(''):'<div class="empty">目前沒有符合條件的優惠券。</div>';
+  return '<article class="couponCard '+s.cls+'"><div class="couponTop"><span>'+esc(s.text)+'</span><span>🎟️</span></div><h3>'+esc(c.title)+'</h3><p>'+esc(c.description||'')+'</p>'+(c.discount?'<strong class="couponDiscount">'+esc(c.discount)+'</strong>':'')+'<div class="couponCode">'+esc(c.code)+'</div><div class="date">'+(c.expires_at?'有效至：'+esc(String(c.expires_at).slice(0,10)):'無期限')+'</div></article>';
 }
 async function loadMyCoupons(){
   const box=$('myCoupons'), gate=$('couponGate');
   if(!box) return;
-  if(!visitorToken()){box.classList.add('hidden');gate?.classList.remove('hidden');return;}
-  gate?.classList.add('hidden');box.classList.remove('hidden');
+  if(!visitorToken()){
+    box.classList.add('hidden'); gate?.classList.remove('hidden'); return;
+  }
+  gate?.classList.add('hidden'); box.classList.remove('hidden');
   const r=await fetch(SUPABASE_URL+'/rest/v1/coupons?select=*&order=created_at.desc',{headers:auth()});
   const rows=r.ok?await r.json():[];
-  window.__myCoupons=rows; renderMyCoupons(rows);
-  const f=$('couponFilter'); if(f&&!f.dataset.bound){f.dataset.bound='1';f.addEventListener('change',()=>renderMyCoupons(window.__myCoupons||[]));}
+  box.innerHTML=rows.length?rows.map(couponCard).join(''):'<div class="empty">目前沒有優惠券。</div>';
 }
 
 async function loadCompetitionMenu(){

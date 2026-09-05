@@ -68,12 +68,20 @@ create table if not exists public.support_tickets (
   subject text not null, message text not null, status text not null default 'open' check(status in ('open','answered','closed')),
   admin_reply text, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
+alter table public.support_tickets add column if not exists updated_at timestamptz not null default now();
+alter table public.support_tickets add column if not exists status text;
+
 
 alter table public.site_settings enable row level security;
 alter table public.profiles enable row level security;
 alter table public.announcements enable row level security;
 alter table public.products enable row level security;
 alter table public.visitor_accounts enable row level security;
+
+update public.support_tickets set status='open' where status is null;
+alter table public.support_tickets drop constraint if exists support_tickets_status_check;
+alter table public.support_tickets add constraint support_tickets_status_check check (status in ('open','answered','closed'));
+create index if not exists support_tickets_status_idx on public.support_tickets(status);
 alter table public.support_tickets enable row level security;
 
 drop policy if exists site_public_read on public.site_settings;
@@ -108,6 +116,26 @@ create policy ticket_owner_read on public.support_tickets for select to authenti
 create policy ticket_admin_all on public.support_tickets for update to authenticated using(public.is_admin()) with check(public.is_admin());
 create policy ticket_admin_delete on public.support_tickets for delete to authenticated using(public.is_admin());
 
+-- 會員安全結案：會員只能將自己的客服案件標記為已結案，不能透過一般 UPDATE 改寫主旨、內容或管理員回覆。
+create or replace function public.close_my_support_ticket(p_ticket_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.support_tickets
+     set status='closed', updated_at=now()
+   where id=p_ticket_id
+     and user_id=auth.uid()
+     and status <> 'closed';
+  return found;
+end;
+$$;
+revoke all on function public.close_my_support_ticket(uuid) from public;
+grant execute on function public.close_my_support_ticket(uuid) to authenticated;
+
+
 -- 將既有公告的分類／排程資料整理好
 update public.announcements set category='最新消息' where category is null or category='';
 update public.announcements set published_at=(date::timestamptz) where published_at is null;
@@ -129,9 +157,6 @@ create table if not exists public.coupons (
   created_at timestamptz not null default now()
 );
 
-alter table public.coupons add column if not exists usage_condition text;
-alter table public.coupons add column if not exists used_at timestamptz;
-
 alter table public.coupons enable row level security;
 
 drop policy if exists coupon_owner_read on public.coupons;
@@ -147,8 +172,6 @@ create policy coupon_admin_all on public.coupons
 
 create index if not exists coupons_user_id_idx on public.coupons(user_id);
 create index if not exists coupons_expires_at_idx on public.coupons(expires_at);
-create index if not exists coupons_used_idx on public.coupons(used);
-
 
 
 -- 達人榜：管理員建立比賽、輸入成績，確認後再公布。
@@ -542,3 +565,5 @@ create policy "competition_registrations_owner_update" on public.competition_reg
 create policy "competition_registrations_owner_delete" on public.competition_registrations for delete to authenticated using (user_id=auth.uid() or exists(select 1 from public.profiles p where p.id=auth.uid() and p.role='admin'));
 create index if not exists competition_registrations_competition_idx on public.competition_registrations(competition_id,created_at desc);
 create index if not exists competition_registrations_user_idx on public.competition_registrations(user_id,created_at desc);
+
+notify pgrst, 'reload schema';
