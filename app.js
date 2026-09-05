@@ -97,6 +97,17 @@ async function getCurrentUser(){
     return await r.json();
   }catch(e){return null}
 }
+function competitionStatus(date){
+  if(!date)return {key:'unknown',label:'日期未設定',icon:'📅'};
+  const d=new Date(date+'T00:00:00');
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const event=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  if(event.getTime()>today.getTime())return {key:'upcoming',label:'即將開始',icon:'🟢'};
+  if(event.getTime()===today.getTime())return {key:'today',label:'今天舉行',icon:'🟡'};
+  return {key:'ended',label:'已結束',icon:'⚪'};
+}
+function competitionStatusBadge(date){const s=competitionStatus(date);return '<span class="competitionStatus status-'+s.key+'">'+s.icon+' '+s.label+'</span>';}
 function competitionResultCard(r){
   const medal=r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':'';
   return '<article class="notice competitionResult"><div class="date">'+medal+' 第 '+esc(r.place)+' 名</div><h3>'+esc(r.player_name)+'</h3>'+(r.score!==null&&r.score!==undefined&&r.score!==''?'<p><b>分數：</b>'+esc(r.score)+'</p>':'')+(r.prize?'<p><b>獎項：</b>'+esc(r.prize)+'</p>':'')+'</article>';
@@ -108,17 +119,25 @@ async function loadCompetitionPage(){
   const params=new URLSearchParams(location.search);
   const id=params.get('id');
   const category=params.get('category');
+  const status=params.get('status');
   let url=SUPABASE_URL+'/rest/v1/competitions?select=*&published=eq.true&order=event_date.desc,created_at.desc';
   if(id)url+='&id=eq.'+encodeURIComponent(id);
-  else if(category&&(category==='Minecraft'||category==='蛋仔'))url+='&category=eq.'+encodeURIComponent(category);
+  else if(category)url+='&category=eq.'+encodeURIComponent(category);
   const r=await fetch(url,{headers:h});
-  const comps=r.ok?await r.json():[];
-  if(!comps.length){box.innerHTML='<div class="empty">目前沒有已公布的比賽成績。</div>';return}
+  let comps=r.ok?await r.json():[];
+  if(status&&['upcoming','today','ended'].includes(status))comps=comps.filter(c=>competitionStatus(c.event_date).key===status);
+  comps.sort((a,b)=>{
+    const rank={upcoming:0,today:1,unknown:2,ended:3};
+    const ra=rank[competitionStatus(a.event_date).key]??2, rb=rank[competitionStatus(b.event_date).key]??2;
+    if(ra!==rb)return ra-rb;
+    return String(b.event_date||'').localeCompare(String(a.event_date||''))||String(b.created_at||'').localeCompare(String(a.created_at||''));
+  });
+  if(!comps.length){box.innerHTML='<div class="empty">目前沒有符合條件的活動／比賽。</div>';return}
   const all=[];
   for(const c of comps){
     const rr=await fetch(SUPABASE_URL+'/rest/v1/competition_results?select=*&competition_id=eq.'+encodeURIComponent(c.id)+'&order=place.asc',{headers:h});
     const results=rr.ok?await rr.json():[];
-    all.push('<section class="competitionCard"><div class="competitionHeader"><div><div class="date">'+esc(c.category)+' · '+esc(c.event_date||'未設定日期')+'</div><h2>'+esc(c.name)+'</h2></div></div>'+(c.description?'<p class="sub">'+esc(c.description).replace(/\n/g,'<br>')+'</p>':'')+'<div class="competitionResults">'+(results.length?results.map(competitionResultCard).join(''):'<div class="empty">這場比賽尚未輸入成績。</div>')+'</div></section>');
+    all.push('<section class="competitionCard"><div class="competitionHeader"><div><div class="date">'+esc(c.category||'未分類')+' · '+esc(c.event_date||'未設定日期')+' '+competitionStatusBadge(c.event_date)+'</div><h2>'+esc(c.name)+'</h2></div></div>'+(c.description?'<p class="sub">'+esc(c.description).replace(/\n/g,'<br>')+'</p>':'')+'<div class="competitionResults">'+(results.length?results.map(competitionResultCard).join(''):'<div class="empty">這場比賽尚未輸入成績。</div>')+'</div></section>');
   }
   box.innerHTML=all.join('');
 }
@@ -154,7 +173,7 @@ async function loadMyCompetitions(){
   const box=$('myCompetitions'); if(!box||!visitorToken())return;
   const r=await fetch(SUPABASE_URL+'/rest/v1/competition_results?select=id,place,score,prize,player_name,competitions(id,name,category,event_date,description,published)&user_id=eq.'+encodeURIComponent((await getCurrentUser()).id)+'&order=created_at.desc',{headers:auth()});
   const rows=r.ok?await r.json():[];
-  box.innerHTML=rows.length?rows.map(x=>'<article class="notice"><div class="date">'+esc(x.competitions?.category||'')+' · '+esc(x.competitions?.event_date||'未設定日期')+'</div><h3>🏆 '+esc(x.competitions?.name||'比賽')+'</h3><p><b>名次：</b>'+esc(x.place)+(x.score!=null?'　<b>分數：</b>'+esc(x.score):'')+(x.prize?'　<b>獎項：</b>'+esc(x.prize):'')+'</p></article>').join(''):'<div class="empty">目前還沒有綁定到你的比賽成績。</div>';
+  box.innerHTML=rows.length?rows.map(x=>'<article class="notice"><div class="date">'+esc(x.competitions?.category||'')+' · '+esc(x.competitions?.event_date||'未設定日期')+' '+competitionStatusBadge(x.competitions?.event_date)+'</div><h3>🏆 '+esc(x.competitions?.name||'比賽')+'</h3><p><b>名次：</b>'+esc(x.place)+(x.score!=null?'　<b>分數：</b>'+esc(x.score):'')+(x.prize?'　<b>獎項：</b>'+esc(x.prize):'')+'</p></article>').join(''):'<div class="empty">目前還沒有綁定到你的比賽成績。</div>';
 }
 async function loadMyAwards(){
   const box=$('myAwards'); if(!box||!visitorToken())return;
@@ -174,4 +193,4 @@ async function loadMyNotifications(){
 async function markNotificationRead(id){const r=await fetch(SUPABASE_URL+'/rest/v1/notifications?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({read_at:new Date().toISOString()})});if(r.ok)loadMyNotifications();}
 function showMySection(id){document.querySelectorAll('.myPanel').forEach(x=>x.classList.add('hidden'));$(id)?.classList.remove('hidden');document.querySelectorAll('.mySubnav a').forEach(a=>a.classList.toggle('active',a.dataset.target===id));}
 
-window.addEventListener('DOMContentLoaded',()=>{bindMobileNav();if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();loadQuickLinks();loadCompetitionMenu();if($('competitionList')&&visitorToken())loadCompetitionPage();if($('myProfile')&&visitorToken()){loadMyProfile();loadMyCompetitions();loadMyAwards();loadMyNotifications();$('saveMyProfile')?.addEventListener('click',saveMyProfile);$('changeMyPassword')?.addEventListener('click',changeMyPassword);showMySection(location.hash?location.hash.slice(1):'myProfilePanel');document.querySelectorAll('.mySubnav a').forEach(a=>a.addEventListener('click',()=>showMySection(a.dataset.target)));} });
+window.addEventListener('DOMContentLoaded',()=>{bindMobileNav();if($('visitorLoginButton'))$('visitorLoginButton').onclick=visitorLogin;if($('visitorLogout'))$('visitorLogout').onclick=visitorLogout;if(visitorToken()){$('visitorGate')?.classList.add('hidden');$('visitorLogout')?.classList.remove('hidden')}else if($('visitorGate'))$('visitorGate').classList.remove('hidden');if($('sendTicket'))$('sendTicket').onclick=sendTicket;if($('visitorGate')&&visitorToken())loadSite();else if(!$('visitorGate'))loadSite();if($('myCoupons')&&visitorToken())loadMyCoupons();loadQuickLinks();loadCompetitionMenu();if($('competitionList'))loadCompetitionPage();if($('myProfile')&&visitorToken()){loadMyProfile();loadMyCompetitions();loadMyAwards();loadMyNotifications();$('saveMyProfile')?.addEventListener('click',saveMyProfile);$('changeMyPassword')?.addEventListener('click',changeMyPassword);showMySection(location.hash?location.hash.slice(1):'myProfilePanel');document.querySelectorAll('.mySubnav a').forEach(a=>a.addEventListener('click',()=>showMySection(a.dataset.target)));} });

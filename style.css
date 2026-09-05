@@ -127,3 +127,9 @@ footer{text-align:center;padding:45px 20px;background:#5f4b82;color:#fff;margin-
   .adminTabGroup{overflow-x:auto;flex-wrap:nowrap;justify-content:flex-start}
   .adminTabGroup>span,.adminTabGroup .tab{flex:0 0 auto}
 }
+
+/* 活動／比賽 v2 */
+.competitionStatus{display:inline-block;margin-left:6px;padding:3px 9px;border-radius:999px;background:#eee5ff;color:#6749cc;font-size:13px;font-weight:900;white-space:nowrap}
+.status-upcoming{background:#e5f8e9;color:#2f7a45}.status-today{background:#fff4cf;color:#8a6a16}.status-ended{background:#eee;color:#777}.status-unknown{background:#f3edf9;color:#8b7e9f}
+.competitionHeader{display:flex;justify-content:space-between;align-items:flex-start;gap:15px}.competitionHeader .date{line-height:1.7}
+@media(max-width:600px){.competitionStatus{margin-left:3px;margin-top:4px}.competitionHeader{display:block}.competitionHeader h2{font-size:25px}}

@@ -283,21 +283,19 @@ alter table public.profiles add column if not exists member_no integer;
 create unique index if not exists profiles_member_no_uidx on public.profiles(member_no) where member_no is not null;
 
 create sequence if not exists public.member_no_seq;
--- 序號只會向前，不因刪除會員而重用。
-do $$
-declare
-  mx bigint;
-  lv bigint;
-  called boolean;
-begin
-  select coalesce(max(member_no),0) into mx from public.profiles;
-  select last_value, is_called into lv, called from public.member_no_seq;
-  if mx = 0 and not called then
-    perform setval('public.member_no_seq', 1, false);
-  elsif mx > 0 and (lv < mx or (lv = mx and not called)) then
-    perform setval('public.member_no_seq', mx, true);
-  end if;
-end $$;
+-- 舊版 sequence 在失敗交易／回滾時可能留下空號，例如 007 後直接跳到 011。
+-- 本版改用交易內可回滾的計數器：建立失敗會回滾，不會再消耗會員編號；刪除會員也不會讓編號被重用。
+create table if not exists public.member_no_counter (
+  id boolean primary key default true check(id=true),
+  next_no integer not null,
+  compacted boolean not null default false,
+  repair_version integer not null default 0
+);
+alter table public.member_no_counter add column if not exists compacted boolean not null default false;
+alter table public.member_no_counter add column if not exists repair_version integer not null default 0;
+-- 計數器只供資料庫 trigger 使用，前台／一般登入使用者不可直接讀寫。
+alter table public.member_no_counter enable row level security;
+insert into public.member_no_counter(id,next_no,compacted,repair_version) values(true,1,false,0) on conflict(id) do nothing;
 
 create or replace function public.assign_member_no_and_nickname()
 returns trigger
@@ -307,14 +305,19 @@ set search_path=public,auth
 as $$
 declare
   mail text;
+  assigned_no integer;
 begin
-  if NEW.role = 'visitor' then
+  if NEW.role='visitor' then
     if NEW.member_no is null then
-      NEW.member_no := nextval('public.member_no_seq');
+      update public.member_no_counter
+        set next_no=next_no+1
+        where id=true
+        returning next_no-1 into assigned_no;
+      NEW.member_no:=coalesce(assigned_no,1);
     end if;
     if nullif(trim(coalesce(NEW.nickname,'')),'') is null then
       select email into mail from auth.users where id=NEW.id;
-      NEW.nickname := coalesce(nullif(split_part(coalesce(mail,''),'@',1),''),'會員');
+      NEW.nickname:=coalesce(nullif(split_part(coalesce(mail,''),'@',1),''),'會員');
     end if;
   end if;
   return NEW;
@@ -327,8 +330,6 @@ before insert on public.profiles
 for each row execute function public.assign_member_no_and_nickname();
 
 -- 修正：有些較早建立的訪客只有 Auth / visitor_accounts，沒有對應 profiles。
--- 讓每次由管理員建立 visitor_accounts 時，都自動建立 visitor profile，
--- 會員編號也會由上面的 trigger 自動產生。
 create or replace function public.ensure_visitor_profile()
 returns trigger
 language plpgsql
@@ -336,9 +337,9 @@ security definer
 set search_path=public,auth
 as $$
 begin
-  insert into public.profiles(id, role)
-  values (NEW.id, 'visitor')
-  on conflict (id) do update set role='visitor';
+  insert into public.profiles(id,role)
+  values(NEW.id,'visitor')
+  on conflict(id) do update set role='visitor';
   return NEW;
 end;
 $$;
@@ -348,44 +349,70 @@ create trigger trg_visitor_accounts_profile
 after insert on public.visitor_accounts
 for each row execute function public.ensure_visitor_profile();
 
--- 先補齊目前已存在、但缺少 profiles 的訪客；新插入的 profiles 會自動取得會員編號。
-insert into public.profiles(id, role)
-select va.id, 'visitor'
+-- 先補齊目前已存在、但缺少 profiles 的訪客。
+insert into public.profiles(id,role)
+select va.id,'visitor'
 from public.visitor_accounts va
 left join public.profiles p on p.id=va.id
 where p.id is null
-on conflict (id) do update set role='visitor';
+on conflict(id) do update set role='visitor';
 
--- 補齊既有訪客會員編號與暱稱；編號一旦產生不會因刪除而回收。
-do $$
-declare
-  r record;
-begin
-  for r in
-    select p.id, u.email
-    from public.profiles p
-    join auth.users u on u.id=p.id
-    where p.role='visitor' and p.member_no is null
-    order by p.created_at, p.id
-  loop
-    update public.profiles
-      set member_no=nextval('public.member_no_seq'),
-          nickname=coalesce(nullif(trim(nickname),''), split_part(coalesce(r.email,''),'@',1), '會員')
-    where id=r.id;
-  end loop;
-end $$;
-
+-- 補齊既有訪客的暱稱。
 update public.profiles p
-set nickname=coalesce(nullif(trim(p.nickname),''), split_part(coalesce(u.email,''),'@',1), '會員')
+set nickname=coalesce(nullif(trim(p.nickname),''),split_part(coalesce(u.email,''),'@',1),'會員')
 from auth.users u
 where p.id=u.id and p.role='visitor' and nullif(trim(coalesce(p.nickname,'')),'') is null;
 
-alter table public.profiles enable row level security;
-drop policy if exists profile_self_update on public.profiles;
-create policy profile_self_update on public.profiles
-for update to authenticated
-using(id=auth.uid())
-with check(id=auth.uid() and role='visitor');
+-- 一次性修正舊版造成的空號：目前仍存在的訪客依建立時間整理成 001、002、003……。
+-- repair_version=2 可避免之後重跑 SQL 時反覆重新編號。會員 UUID、比賽、優惠券、客服等資料關聯不變。
+do $$
+declare
+  total integer;
+  repair_ver integer;
+begin
+  select coalesce(repair_version,0) into repair_ver
+  from public.member_no_counter where id=true;
+
+  select count(*)::integer into total
+  from public.profiles
+  where role='visitor';
+
+  if repair_ver < 2 then
+    if total > 0 then
+      -- 先暫時移到負數區間，避免 unique index 在交換編號時衝突。
+      with temporary_numbers as (
+        select id, (-1000000-row_number() over (order by created_at,id))::integer as temp_no
+        from public.profiles
+        where role='visitor'
+      )
+      update public.profiles p
+        set member_no=t.temp_no
+      from temporary_numbers t
+      where p.id=t.id;
+
+      with numbered as(
+        select id,row_number() over(order by created_at,id)::integer as new_no
+        from public.profiles
+        where role='visitor'
+      )
+      update public.profiles p
+        set member_no=n.new_no
+      from numbered n
+      where p.id=n.id;
+    end if;
+
+    update public.member_no_counter
+      set next_no=coalesce((select max(member_no)+1 from public.profiles where role='visitor'),1),
+          compacted=true,
+          repair_version=2
+      where id=true;
+  else
+    -- 正常重跑 SQL 時，只校正計數器，不重新整理既有會員編號。
+    update public.member_no_counter
+      set next_no=greatest(next_no,coalesce((select max(member_no)+1 from public.profiles where role='visitor'),1))
+      where id=true;
+  end if;
+end $$;
 
 -- 比賽成績可選擇綁定會員；既有資料維持可用。
 alter table public.competition_results add column if not exists user_id uuid references auth.users(id) on delete set null;

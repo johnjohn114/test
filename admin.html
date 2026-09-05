@@ -2,7 +2,7 @@
 <div id="login" class="gate"><div class="gate-card"><div class="lock">👑</div><h1>管理員登入</h1><p>管理網站內容、會員、比賽與營運</p><input id="email" type="email" placeholder="管理員 Email"><input id="password" type="password" placeholder="管理員密碼"><button id="loginButton">登入後台</button><small id="loginError"></small><a href="index.html">← 返回網站</a></div></div>
 <div id="dashboard" class="dashboard hidden"><header><div class="nav"><div class="logo">👑 網站管理後台</div><button class="mobileNavToggle" type="button" aria-expanded="false" aria-label="開啟選單">☰ 選單</button><nav><a href="index.html">查看網站</a><button id="logoutButton">登出</button></nav></div></header><main><section>
 <div class="adminTabs">
-  <div class="adminTabGroup"><span>網站</span><button class="tab active" data-tab="contentTab">🎨 網站內容</button><button class="tab" data-tab="newsTab">📢 公告管理</button><button class="tab" data-tab="competitionTab">🏆 達人榜</button></div>
+  <div class="adminTabGroup"><span>網站</span><button class="tab active" data-tab="contentTab">🎨 網站內容</button><button class="tab" data-tab="newsTab">📢 公告管理</button><button class="tab" data-tab="competitionTab">🎮 活動／比賽</button></div>
   <div class="adminTabGroup"><span>會員</span><button class="tab" data-tab="visitorTab">👥 訪客帳號</button><button class="tab" data-tab="couponTab">🎟️ 優惠券</button><button class="tab" data-tab="notificationTab">🔔 通知管理</button></div>
   <div class="adminTabGroup"><span>營運</span><button class="tab" data-tab="productTab">📦 商品管理</button><button class="tab" data-tab="quickLinkTab">🔗 快速連結</button><button class="tab" data-tab="supportTab">💬 客服中心</button></div>
 </div>
@@ -13,8 +13,8 @@
 <div id="productTab" class="tabPanel hidden"><h2>📦 商品管理</h2><div class="editor"><input id="productId" type="hidden"><label>商品名稱<input id="productName"></label><label>分類<input id="productCategory" placeholder="例如：遊戲周邊"></label><label>價格<input id="productPrice" type="number" min="0" step="1"></label><label>圖片網址<input id="productImage"></label><label>商品介紹<textarea id="productDescription" rows="5"></textarea></label><label class="check"><input id="productActive" type="checkbox" checked> 上架</label><button class="btn" id="saveProduct">📦 儲存商品</button><button class="btn secondary" id="clearProduct">清除表單</button><small id="productMsg"></small></div><h2 style="margin-top:40px">商品列表</h2><div id="adminProducts" class="productGrid"></div></div>
 <div id="visitorTab" class="tabPanel hidden"><h2>👥 訪客帳號</h2><div class="editor"><label>訪客 Email<input id="visitorAccountEmail" type="email"></label><label>統一訪客密碼<input id="sharedVisitorPassword" type="password" minlength="8" placeholder="所有訪客共用的密碼"></label><button class="btn" id="createVisitor">＋ 建立訪客帳號</button><button class="btn secondary" id="setSharedVisitorPassword">🔑 將此密碼套用到所有訪客</button><small id="visitorMsg"></small><small id="sharedPasswordMsg"></small><p class="sub">所有訪客使用同一組統一密碼；訪客仍以自己的 Email 識別，所以優惠券與客服紀錄可以分開。</p></div><div id="visitorList" class="newsList"></div></div>
 <div id="couponTab" class="tabPanel hidden"><h2>🎟️ 優惠券管理</h2><div class="editor"><label>優惠券名稱<input id="couponTitle" placeholder="例如：新會員 9 折券"></label><label>優惠內容<input id="couponDescription" placeholder="全站商品 9 折"></label><label>優惠碼<input id="couponCode" placeholder="WELCOME90"></label><label>折扣／面額<input id="couponDiscount" placeholder="例如：9 折"></label><label>有效期限<input id="couponExpires" type="date"></label><label>發送給<select id="couponVisitor"></select></label><button class="btn" id="createCoupon">🎟️ 發送優惠券</button><small id="couponMsg"></small></div><h2 style="margin-top:40px">優惠券紀錄</h2><div id="adminCoupons" class="newsList"></div></div>
-<div id="competitionTab" class="tabPanel hidden"><h2>🏆 達人榜管理</h2>
-<p class="sub">自己輸入比賽成績；儲存後先保持草稿，按「公布」後才會出現在網站的歷屆成績。</p>
+<div id="competitionTab" class="tabPanel hidden"><h2>🎮 活動／比賽管理</h2>
+<p class="sub">建立活動／比賽、輸入成績並公布。公布後會出現在前台的活動／比賽頁與「歷屆成績」入口。</p>
 <div class="editor">
 <input id="competitionId" type="hidden">
 <label>比賽名稱<input id="competitionName" placeholder="例如：Minecraft 建築大賽 #1"></label>
@@ -59,4 +59,4 @@
 </div>
 </div>
 <div id="notificationTab" class="tabPanel hidden"><h2>🔔 通知管理</h2><p class="sub">可發送給單一會員或全部會員；通知會出現在「我的 → 我的通知」。</p><div class="editor"><label>通知標題<input id="notificationTitle"></label><label>通知類型<input id="notificationType" placeholder="例如：系統、比賽、優惠"></label><label>通知內容<textarea id="notificationContent" rows="5"></textarea></label><label>發送給<select id="notificationUser"></select></label><button class="btn" id="createNotification">🔔 發送通知</button><small id="notificationMsg"></small></div><h2 style="margin-top:40px">通知紀錄</h2><div id="adminNotifications" class="newsList"></div></div><div id="supportTab" class="tabPanel hidden"><h2>💬 客服中心</h2><div id="ticketList" class="newsList"></div></div>
-</section></main></div><script src="config.js"></script><script src="admin.js?v=all-features-v1"></script></body></html>
+</section></main></div><script src="config.js"></script><script src="admin.js?v=competition-v2"></script></body></html>
