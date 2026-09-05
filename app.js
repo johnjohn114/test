@@ -77,7 +77,7 @@ async function loadMyCoupons(){
 async function loadCompetitionMenu(){
   const menus=[...document.querySelectorAll('#competitionMenu')];
   if(!menus.length||!configured())return;
-  const cacheKey='competition-menu-v2';
+  const cacheKey='competition-menu-v4';
   const now=Date.now();
   try{
     const cached=sessionStorage.getItem(cacheKey);
@@ -92,23 +92,43 @@ async function loadCompetitionMenu(){
   try{
     const [cr,gr]=await Promise.all([
       fetch(SUPABASE_URL+'/rest/v1/competitions?select=id,name,category&published=eq.true&order=event_date.desc,created_at.desc&limit=200',{headers:h}),
-      fetch(SUPABASE_URL+'/rest/v1/competition_categories?select=name&order=name.asc&limit=100',{headers:h})
+      fetch(SUPABASE_URL+'/rest/v1/competition_categories?select=name,parent_category&order=name.asc&limit=100',{headers:h})
     ]);
     const rows=cr.ok?await cr.json():[];
     const cats=gr.ok?await gr.json():[];
-    const names=['Minecraft','蛋仔'];
-    [...cats,...rows].forEach(x=>{if(x?.category && !names.includes(x.category))names.push(x.category);if(x?.name && !names.includes(x.name))names.push(x.name)});
-    const groups=names.map(cat=>({cat,rows:rows.filter(x=>x.category===cat)}));
-    try{sessionStorage.setItem(cacheKey,JSON.stringify({at:now,groups}));}catch(e){}
+    const groups={minecraft:[],egg:[],custom:[]};
+    cats.forEach(c=>{
+      if(!c?.name||c.name==='Minecraft'||c.name==='蛋仔')return;
+      if(c.parent_category==='蛋仔') groups.egg.push(c.name);
+      else groups.custom.push(c.name);
+    });
+    // 若舊資料尚未完成 migration，名稱含「蛋仔」的既有分類仍歸入蛋仔子選單。
+    rows.forEach(x=>{
+      const cat=x?.category;
+      if(!cat||cat==='Minecraft'||cat==='蛋仔')return;
+      if(!cats.some(c=>c.name===cat) && cat.includes('蛋仔') && !groups.egg.includes(cat)) groups.egg.push(cat);
+      else if(!cats.some(c=>c.name===cat) && !groups.custom.includes(cat)) groups.custom.push(cat);
+    });
+    groups.egg.sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+    groups.custom.sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+    const data={at:now,groups};
+    try{sessionStorage.setItem(cacheKey,JSON.stringify(data));}catch(e){}
     renderCompetitionMenus(menus,groups);
   }catch(e){
     console.error('歷屆成績選單載入失敗:',e);
-    renderCompetitionMenus(menus,[{cat:'Minecraft',rows:[]},{cat:'蛋仔',rows:[]}]);
+    renderCompetitionMenus(menus,{minecraft:[],egg:[],custom:[]});
   }
 }
 function renderCompetitionMenus(menus,groups){
-  const iconFor=cat=>cat==='Minecraft'?'🎮':cat==='蛋仔'?'🥚':'🏷️';
-  const html='<a href="competitions.html">📚 全部歷屆成績</a><a href="competitions.html#leaderboard">🏆 達人榜</a>'+groups.map(g=>'<div class="dropdownGroup"><a class="dropdownGroupTitle" href="competitions.html?category='+encodeURIComponent(g.cat)+'">'+iconFor(g.cat)+' '+esc(g.cat)+' 分類</a></div>').join('');
+  const link=(cat,icon)=>'<a href="competitions.html?category='+encodeURIComponent(cat)+'">'+icon+' '+esc(cat)+' 分類</a>';
+  const eggChildren=(groups.egg||[]).map(cat=>'<a class="dropdownSubLink" href="competitions.html?category='+encodeURIComponent(cat)+'">'+esc(cat)+'</a>').join('');
+  const custom=(groups.custom||[]).map(cat=>link(cat,'🏷️')).join('');
+  const egg=
+    '<div class="dropdownNested">'+
+      '<a class="dropdownNestedTitle" href="competitions.html?category='+encodeURIComponent('蛋仔')+'">🥚 蛋仔派對 <span>▸</span></a>'+
+      (eggChildren?'<div class="dropdownSubmenu">'+eggChildren+'</div>':'')+
+    '</div>';
+  const html='<a href="competitions.html">📚 全部歷屆成績</a><a href="competitions.html#leaderboard">🏆 達人榜</a>'+link('Minecraft','🎮')+egg+custom;
   menus.forEach(m=>m.innerHTML=html);
 }
 

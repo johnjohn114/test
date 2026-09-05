@@ -163,8 +163,15 @@ create table if not exists public.competitions (
 create table if not exists public.competition_categories (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
+  parent_category text,
   created_at timestamptz not null default now()
 );
+
+-- 歷屆成績分類階層：既有自訂分類歸到「蛋仔派對」子選單；之後新建分類預設為最外層。
+alter table public.competition_categories add column if not exists parent_category text;
+update public.competition_categories
+set parent_category='蛋仔'
+where name not in ('Minecraft','蛋仔') and parent_category is null;
 
 alter table public.competition_categories enable row level security;
 drop policy if exists competition_categories_admin_all on public.competition_categories;
@@ -173,8 +180,8 @@ create policy competition_categories_admin_all on public.competition_categories
   using (public.is_admin())
   with check (public.is_admin());
 
-insert into public.competition_categories(name)
-values ('Minecraft'),('蛋仔')
+insert into public.competition_categories(name, parent_category)
+values ('Minecraft',null),('蛋仔',null)
 on conflict (name) do nothing;
 
 -- 既有 competitions 以前有固定 CHECK；移除後才能使用自訂分類。

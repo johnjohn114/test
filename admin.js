@@ -329,7 +329,7 @@ function getCompetitionResults(){
 async function competitionCategories(){
   if(!$('competitionCategory')||!configured()||!localStorage.getItem('access_token'))return;
   try{
-    const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories?select=id,name&order=name.asc',{headers:auth()});
+    const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories?select=id,name,parent_category&order=name.asc',{headers:auth()});
     if(!r.ok)throw new Error('無法讀取分類 HTTP '+r.status);
     const rows=await r.json();
     const sel=$('competitionCategory');
@@ -342,7 +342,7 @@ async function competitionCategories(){
     if(box){
       box.innerHTML=rows.map(c=>{
         const safeId=esc(c.id);
-        const buttons=(c.name==='Minecraft'||c.name==='蛋仔') ? '<span class="sub">預設分類</span>' : '<button type="button" class="btn secondary categoryEdit" data-cat-edit="'+safeId+'" data-cat-name="'+esc(c.name)+'">✏️ 修改</button> <button type="button" class="btn secondary categoryDelete" data-cat-del="'+safeId+'" data-cat-name="'+esc(c.name)+'">🗑️ 刪除</button>';
+        const parentLabel=c.parent_category==='蛋仔'?'↳ 蛋仔派對子分類':'最外層分類'; const buttons=(c.name==='Minecraft'||c.name==='蛋仔') ? '<span class="sub">預設分類</span>' : '<span class="sub">'+parentLabel+'</span> <button type="button" class="btn secondary categoryEdit" data-cat-edit="'+safeId+'" data-cat-name="'+esc(c.name)+'">✏️ 修改</button> <button type="button" class="btn secondary categoryDelete" data-cat-del="'+safeId+'" data-cat-name="'+esc(c.name)+'">🗑️ 刪除</button>';
         return '<article class="notice"><div class="date">'+(false?'⭐ ':'')+esc(c.name)+'</div>'+buttons+'</article>';
       }).join('') || '<div class="empty">目前沒有分類。</div>';
       box.querySelectorAll('[data-cat-edit]').forEach(b=>b.onclick=()=>editCompetitionCategory(b.dataset.catEdit,b.dataset.catName));
@@ -361,7 +361,7 @@ async function addCompetitionCategory(){
     const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories',{
       method:'POST',
       headers:{...auth(),Prefer:'return=representation'},
-      body:JSON.stringify({name})
+      body:JSON.stringify({name,parent_category:null})
     });
     const d=await r.json().catch(()=>[]);
     if(!r.ok)throw new Error(d.message||d.hint||('HTTP '+r.status));
@@ -379,13 +379,16 @@ async function editCompetitionCategory(id,currentName){
   if(next===null)return;
   const name=next.trim();
   if(!name){alert('分類名稱不能為空白。');return}
+  const parentInput=prompt('要放在哪個分類底下？\n留白 = 最外層\n輸入「蛋仔」 = 放到蛋仔派對子選單', currentName==='蛋仔' ? '' : '');
+  if(parentInput===null)return;
+  const parent_category=parentInput.trim()==='蛋仔'?'蛋仔':null;
   try{
     const used=await fetch(SUPABASE_URL+'/rest/v1/competitions?select=id&category=eq.'+encodeURIComponent(currentName)+'&limit=1',{headers:auth()});
     const usedRows=used.ok?await used.json():[];
     const r=await fetch(SUPABASE_URL+'/rest/v1/competition_categories?id=eq.'+encodeURIComponent(id),{
       method:'PATCH',
       headers:{...auth(),Prefer:'return=representation'},
-      body:JSON.stringify({name})
+      body:JSON.stringify({name,parent_category})
     });
     const d=await r.json().catch(()=>[]);
     if(!r.ok)throw new Error(d.message||d.hint||('HTTP '+r.status));

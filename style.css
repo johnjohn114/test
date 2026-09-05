@@ -222,3 +222,15 @@ footer{text-align:center;padding:45px 20px;background:#5f4b82;color:#fff;margin-
 .registrationAdvancedGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0}.registrationAdvancedGrid .check{display:flex;align-items:center;gap:8px}.registrationAdvancedGrid input[type=checkbox]{width:auto}.registrationFieldGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}.registrationFieldGrid label{margin:0}.registrationStatus{margin-bottom:8px}.registrationMeta{font-size:.9rem}.statusPending{color:#8a5a00}.statusApproved{color:#176b3a}.statusRejected{color:#9b2226}@media(max-width:700px){.registrationAdvancedGrid,.registrationFieldGrid{grid-template-columns:1fr}}
 
 .notificationActions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.notificationActions .btn{margin:0}@media(max-width:600px){.notificationActions{justify-content:flex-start;width:100%}.notificationActions .btn{flex:1;min-width:150px}}
+
+/* 歷屆成績分類階層 v4 */
+.dropdownNested{position:relative;margin-top:4px}
+.dropdownNestedTitle{display:flex!important;align-items:center;justify-content:space-between;gap:14px;font-weight:900!important;background:#faf7ff}
+.dropdownNestedTitle span{font-size:14px;opacity:.65}
+.dropdownSubmenu{display:none;position:absolute;right:100%;top:0;min-width:220px;background:#fff;border:1px solid #eadff5;border-radius:16px;padding:7px;box-shadow:0 16px 40px rgba(83,62,120,.14);z-index:60;margin-right:6px}
+.dropdownNested:hover>.dropdownSubmenu,.dropdownNested:focus-within>.dropdownSubmenu{display:block}
+.dropdownSubLink{display:block!important;padding:9px 12px!important;border-radius:10px!important;white-space:normal!important}
+@media(max-width:600px){
+  .dropdownSubmenu{display:block;position:static;min-width:0;margin:2px 0 0;box-shadow:none;border:0;border-radius:10px;padding:2px 0 2px 10px}
+  .dropdownNestedTitle span{transform:rotate(90deg)}
+}
