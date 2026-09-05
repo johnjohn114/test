@@ -23,7 +23,8 @@
 5. Edge Function 需要 Supabase 自動提供的 SUPABASE_URL、SUPABASE_ANON_KEY、SUPABASE_SERVICE_ROLE_KEY。
 6. schema_upgrade.sql 會把當下已存在的 Auth 使用者建立成 admin。若有多個既有使用者，請手動把真正管理員設成 admin，例如：
    update public.profiles p set role='admin' from auth.users u where p.id=u.id and u.email='你的管理員Email';
-7. 新建立的訪客會由 Edge Function 建立為 visitor。
+7. 新建立的訪客會由 Edge Function 建立帳號，並由資料庫 trigger 自動補上 visitor profile 與 3 碼會員編號。
+8. 如果已有訪客在後台看得到 Email，但「會員編號」顯示為「—」，請重新執行本版 schema_upgrade_rerunnable.sql；SQL 會自動補齊缺少的 profiles 與會員編號。
 
 【重要安全提醒】
 - 不要把 service_role key 放進 config.js 或任何前端 JS。

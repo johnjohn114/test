@@ -326,6 +326,36 @@ create trigger trg_profiles_member_no
 before insert on public.profiles
 for each row execute function public.assign_member_no_and_nickname();
 
+-- 修正：有些較早建立的訪客只有 Auth / visitor_accounts，沒有對應 profiles。
+-- 讓每次由管理員建立 visitor_accounts 時，都自動建立 visitor profile，
+-- 會員編號也會由上面的 trigger 自動產生。
+create or replace function public.ensure_visitor_profile()
+returns trigger
+language plpgsql
+security definer
+set search_path=public,auth
+as $$
+begin
+  insert into public.profiles(id, role)
+  values (NEW.id, 'visitor')
+  on conflict (id) do update set role='visitor';
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trg_visitor_accounts_profile on public.visitor_accounts;
+create trigger trg_visitor_accounts_profile
+after insert on public.visitor_accounts
+for each row execute function public.ensure_visitor_profile();
+
+-- 先補齊目前已存在、但缺少 profiles 的訪客；新插入的 profiles 會自動取得會員編號。
+insert into public.profiles(id, role)
+select va.id, 'visitor'
+from public.visitor_accounts va
+left join public.profiles p on p.id=va.id
+where p.id is null
+on conflict (id) do update set role='visitor';
+
 -- 補齊既有訪客會員編號與暱稱；編號一旦產生不會因刪除而回收。
 do $$
 declare
