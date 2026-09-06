@@ -284,3 +284,6 @@ body.popupOpen{overflow:hidden}
 
 .couponUseBtn{width:100%;margin-top:12px;border:0;border-radius:12px;padding:11px 14px;font-weight:900;cursor:pointer}
 .couponUseBtn:active{transform:translateY(1px)}
+
+
+.growthToast{position:fixed;right:20px;bottom:20px;z-index:9999;display:flex;flex-direction:column;gap:4px;min-width:240px;max-width:360px;padding:14px 16px;border-radius:14px;background:var(--card,#fff);border:1px solid var(--line,#ddd);box-shadow:0 12px 35px rgba(0,0,0,.14);opacity:0;transform:translateY(12px);pointer-events:none;transition:.25s ease}.growthToast.show{opacity:1;transform:translateY(0)}.growthToast strong{font-size:16px}.growthToast span{font-size:13px;line-height:1.5}@media(max-width:640px){.growthToast{left:14px;right:14px;bottom:14px;min-width:0;max-width:none}}

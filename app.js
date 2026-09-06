@@ -474,6 +474,13 @@ async function loadMyOverview(){
   }
 }
 
+function showGrowthToast(title,content){
+  let box=document.getElementById('growthToast');
+  if(!box){box=document.createElement('div');box.id='growthToast';box.className='growthToast';document.body.appendChild(box);}
+  box.innerHTML='<strong>'+esc(title)+'</strong><span>'+esc(content)+'</span>';
+  box.classList.add('show'); clearTimeout(window.__growthToastTimer); window.__growthToastTimer=setTimeout(()=>box.classList.remove('show'),4500);
+}
+
 async function loadMyGrowth(){
   const panel=$('myGrowthPanel'); if(!panel||!visitorToken()||!configured())return;
   try{
@@ -481,6 +488,7 @@ async function loadMyGrowth(){
     // 記錄今日活躍，讓連續登入／活躍成就可以即時判定。
     const activityR=await fetch(SUPABASE_URL+'/rest/v1/rpc/record_growth_activity',{method:'POST',headers:{...auth(),Prefer:'return=representation'},body:'{}'});
     const activity=activityR.ok?await activityR.json():{};
+    if(Number(activity?.new_achievements||0)>0){ showGrowthToast('🏆 成就解鎖！','你剛剛解鎖了 '+Number(activity.new_achievements)+' 個新成就。'); }
     // 先執行可自動完成的任務與成就，再重新讀取積分／等級，避免畫面顯示舊資料。
     const tr0=await fetch(SUPABASE_URL+'/rest/v1/growth_tasks?select=*&order=created_at.asc',{headers:auth()});
     const tasks=tr0.ok?await tr0.json():[];
@@ -607,7 +615,7 @@ async function loadMyAwards(){
   box.innerHTML=awards.length?awards.map(x=>'<article class="notice"><div class="date">'+(Number(x.place)===1?'🥇':Number(x.place)===2?'🥈':Number(x.place)===3?'🥉':'🏅')+' '+esc(x.competitions?.category||'')+' · '+esc(x.competitions?.event_date||'')+'</div><h3>'+esc(x.competitions?.name||'比賽')+'</h3><p><b>名次：</b>'+esc(x.place)+(x.prize?'　<b>獎項：</b>'+esc(x.prize):'')+'</p></article>').join(''):'<div class="empty">目前還沒有獎項紀錄。</div>';
 }
 let myNotificationRows=[];
-function notificationIcon(type){return type==='比賽'?'🏆':type==='優惠券'?'🎟️':type==='客服'?'💬':'📢'}
+function notificationIcon(type){return type==='比賽'?'🏆':type==='優惠券'?'🎟️':type==='客服'?'💬':type==='成長'?'💎':'📢'}
 async function loadNotificationBadge(){
   const btn=document.querySelector('.myNavMenu')?.previousElementSibling;
   if(!btn||!visitorToken()||!configured())return;
