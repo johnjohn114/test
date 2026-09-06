@@ -614,30 +614,26 @@ async function deleteGrowthReward(id){
   if(!confirm('確定要刪除「'+title+'」？'))return;
   try{
     msg('rewardMsg','⏳ 正在處理刪除…');
-    // 先查是否有兌換紀錄；有紀錄時不真正刪除，以免破壞歷史資料。
-    const cr=await fetch(SUPABASE_URL+'/rest/v1/growth_reward_redemptions?select=id&reward_id=eq.'+encodeURIComponent(id)+'&limit=1',{headers:auth()});
-    if(!cr.ok){const d=await cr.json().catch(()=>({}));throw new Error(d.message||d.hint||('查詢兌換紀錄失敗 HTTP '+cr.status));}
-    const history=await cr.json();
-    if(history.length){
-      const r=await fetch(SUPABASE_URL+'/rest/v1/growth_rewards?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({enabled:false})});
-      if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.message||d.hint||('停用獎勵失敗 HTTP '+r.status));}
-      growthRewards=growthRewards.filter(x=>String(x.id)!==String(id));
-      renderRewardsAdminList();
-      msg('rewardMsg','⚠️ 已有兌換紀錄，已安全停用並從列表移除。');
-      clearReward();
-      return;
-    }
-    const r=await fetch(SUPABASE_URL+'/rest/v1/growth_rewards?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:{...auth(),Prefer:'return=minimal'}});
-    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.message||d.hint||('刪除獎勵失敗 HTTP '+r.status));}
+    const token=localStorage.getItem('access_token');
+    if(!token) throw new Error('登入狀態已失效，請重新登入管理員。');
+    const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_delete_growth_reward',{
+      method:'POST',
+      headers:{...auth(),'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({p_reward_id:id})
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.message||d.hint||d.details||('刪除獎勵失敗 HTTP '+r.status));
+    if(!d.success) throw new Error(d.message||'刪除獎勵失敗');
     growthRewards=growthRewards.filter(x=>String(x.id)!==String(id));
     renderRewardsAdminList();
-    msg('rewardMsg','✅ 獎勵已刪除。');
     clearReward();
+    msg('rewardMsg',d.action==='disabled'?'⚠️ 此獎勵已有兌換紀錄，已安全停用。':'✅ 獎勵已刪除。');
   }catch(e){
     console.error('刪除獎勵失敗:',e);
     msg('rewardMsg','❌ 刪除失敗：'+(e.message||e));
   }
 }
+
 function renderRewardsAdminList(){
   const list=$('adminRewards');
   if(!list)return;
