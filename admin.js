@@ -575,86 +575,27 @@ let rewardAchievements=[];
 async function loadRewardManagers(){
   try{
     const [rr,ar,red]=await Promise.all([
-      fetch(SUPABASE_URL+'/rest/v1/growth_rewards?select=*&order=enabled.desc,sort_order.asc,created_at.asc',{headers:auth()}),
+      fetch(SUPABASE_URL+'/rest/v1/growth_rewards?select=*&order=sort_order.asc,created_at.asc',{headers:auth()}),
       fetch(SUPABASE_URL+'/rest/v1/growth_achievements?select=id,title&order=created_at.asc',{headers:auth()}),
-      fetch(SUPABASE_URL+'/rest/v1/growth_reward_redemptions?select=reward_id,status&order=created_at.desc&limit=1000',{headers:auth()})
+      fetch(SUPABASE_URL+'/rest/v1/growth_reward_redemptions?select=*,growth_rewards(title)&order=created_at.desc&limit=200',{headers:auth()})
     ]);
-    if(!rr.ok){const d=await rr.json().catch(()=>({}));throw new Error(d.message||d.hint||('載入獎勵失敗 HTTP '+rr.status));}
-    growthRewards=await rr.json(); rewardAchievements=ar.ok?await ar.json():[];
+    growthRewards=rr.ok?await rr.json():[]; rewardAchievements=ar.ok?await ar.json():[];
     const reds=red.ok?await red.json():[];
-    const redemptionCount=new Map();
-    reds.forEach(x=>redemptionCount.set(String(x.reward_id),(redemptionCount.get(String(x.reward_id))||0)+1));
-    const sel=$('rewardAchievement');
-    if(sel){const old=sel.value;sel.innerHTML='<option value="">無</option>'+rewardAchievements.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.title)+'</option>').join('');sel.value=old;}
-    $('adminRewards').innerHTML=growthRewards.length?growthRewards.map(r=>{
-      const ach=rewardAchievements.find(a=>a.id===r.required_achievement_id);
-      const redeemed=redemptionCount.get(String(r.id))||0;
-      const availability=[
-        r.available_from?'開始 '+new Date(r.available_from).toLocaleString('zh-TW'):null,
-        r.available_until?'結束 '+new Date(r.available_until).toLocaleString('zh-TW'):null
-      ].filter(Boolean).join(' · ');
-      return '<article class="notice"><div class="date">'+(r.enabled?'🟢 啟用':'⚪ 停用')+' · '+esc(r.code)+'</div>'+
-        '<h3>'+esc(r.icon||'🎁')+' '+esc(r.title)+'</h3>'+
-        '<p>'+esc(r.description||'')+'</p>'+
-        '<p><b>💎 '+Number(r.point_cost).toLocaleString()+' 點</b> · 最低等級：'+esc(r.min_level)+(ach?' · 成就：'+esc(ach.title):'')+'</p>'+
-        '<p class="sub">每人上限：'+(r.user_limit??'不限')+' · 總上限：'+(r.total_limit??'不限')+' · 已兌換：'+redeemed+(availability?' · '+esc(availability):'')+'</p>'+
-        '<div class="competitionActions"><button class="btn secondary" type="button" onclick="editGrowthReward('+JSON.stringify(String(r.id))+')">✏️ 編輯</button> '+
-        '<button class="btn secondary" type="button" onclick="deleteGrowthReward('+JSON.stringify(String(r.id))+')">🗑️ 刪除</button></div></article>';
-    }).join(''):'<div class="empty">目前沒有獎勵。</div>';
-    $('adminRewardRedemptions').innerHTML=reds.length?reds.map(x=>'<article class="notice"><div class="date">'+esc(new Date(x.created_at||Date.now()).toLocaleString('zh-TW'))+'</div><p>獎勵 ID：'+esc(x.reward_id)+' · '+esc(x.status==='redeemed'?'已兌換':(x.status||'紀錄'))+'</p></article>').join(''):'<div class="empty">尚無兌換紀錄。</div>';
+    const sel=$('rewardAchievement'); if(sel){const old=sel.value;sel.innerHTML='<option value="">無</option>'+rewardAchievements.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.title)+'</option>').join('');sel.value=old;}
+    $('adminRewards').innerHTML=growthRewards.length?growthRewards.map(r=>{const ach=rewardAchievements.find(a=>a.id===r.required_achievement_id);return '<article class="notice"><div class="date">'+(r.enabled?'🟢 啟用':'⚪ 停用')+' · '+esc(r.code)+'</div><h3>'+esc(r.icon||'🎁')+' '+esc(r.title)+'</h3><p>'+esc(r.description||'')+'</p><p><b>💎 '+Number(r.point_cost).toLocaleString()+' 點</b> · 最低等級：'+esc(r.min_level)+(ach?' · 成就：'+esc(ach.title):'')+'</p><p class="sub">每人上限：'+(r.user_limit??'不限')+' · 總上限：'+(r.total_limit??'不限')+'</p><div class="competitionActions"><button class="btn secondary" type="button" onclick="editGrowthReward('+JSON.stringify(String(r.id))+')">✏️ 編輯</button></div></article>'}).join(''):'<div class="empty">目前沒有獎勵。</div>';
+    $('adminRewardRedemptions').innerHTML=reds.length?reds.map(x=>'<article class="notice"><div class="date">'+esc(new Date(x.created_at).toLocaleString('zh-TW'))+'</div><h3>🎁 '+esc(x.growth_rewards?.title||'會員獎勵')+'</h3><p>會員：'+esc(x.user_id)+' · '+esc(x.status==='redeemed'?'已兌換':'已取消')+'</p><p>扣除 💎 '+esc(x.point_cost)+' 點'+(x.coupon_id?' · 已產生優惠券':'')+'</p></article>').join(''):'<div class="empty">尚無兌換紀錄。</div>';
   }catch(e){console.error('獎勵管理載入失敗:',e);msg('rewardMsg','❌ '+e.message)}
 }
-
 function editGrowthReward(id){const x=growthRewards.find(v=>v.id===id);if(!x)return;$('rewardId').value=x.id;$('rewardCode').value=x.code;$('rewardTitle').value=x.title;$('rewardDescription').value=x.description||'';$('rewardIcon').value=x.icon||'🎁';$('rewardCategory').value=x.category||'other';$('rewardPointCost').value=x.point_cost;$('rewardMinLevel').value=x.min_level||'newbie';$('rewardAchievement').value=x.required_achievement_id||'';$('rewardUserLimit').value=x.user_limit??'';$('rewardTotalLimit').value=x.total_limit??'';$('rewardCouponTitle').value=x.coupon_title||'';$('rewardCouponDescription').value=x.coupon_description||'';$('rewardCouponDiscount').value=x.coupon_discount||'';$('rewardCouponExpiresDays').value=x.coupon_expires_days??'';$('rewardAvailableFrom').value=x.available_from?new Date(x.available_from).toISOString().slice(0,16):'';$('rewardAvailableUntil').value=x.available_until?new Date(x.available_until).toISOString().slice(0,16):'';$('rewardSortOrder').value=x.sort_order??0;$('rewardEnabled').checked=!!x.enabled;window.scrollTo({top:$('rewardTab').offsetTop-20,behavior:'smooth'})}
 function clearReward(){$('rewardId').value='';['rewardCode','rewardTitle','rewardDescription','rewardCouponTitle','rewardCouponDescription','rewardCouponDiscount','rewardUserLimit','rewardTotalLimit','rewardCouponExpiresDays','rewardAvailableFrom','rewardAvailableUntil'].forEach(id=>$(id).value='');$('rewardIcon').value='🎁';$('rewardCategory').value='cash';$('rewardPointCost').value=50;$('rewardMinLevel').value='newbie';$('rewardAchievement').value='';$('rewardSortOrder').value=0;$('rewardEnabled').checked=true}
-async function deleteGrowthReward(id){
-  if(!id)return;
-  const item=growthRewards.find(x=>String(x.id)===String(id));
-  const title=item?.title||'這個獎勵';
-  if(!confirm('確定要刪除「'+title+'」？'))return;
-  try{
-    msg('rewardMsg','⏳ 正在處理刪除…');
-    const token=localStorage.getItem('access_token');
-    if(!token) throw new Error('登入狀態已失效，請重新登入管理員。');
-    const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_delete_growth_reward',{
-      method:'POST',
-      headers:{...auth(),'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-      body:JSON.stringify({p_reward_id:id})
-    });
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(d.message||d.hint||d.details||('刪除獎勵失敗 HTTP '+r.status));
-    if(!d.success) throw new Error(d.message||'刪除獎勵失敗');
-    growthRewards=growthRewards.filter(x=>String(x.id)!==String(id));
-    renderRewardsAdminList();
-    clearReward();
-    msg('rewardMsg',d.action==='disabled'?'⚠️ 此獎勵已有兌換紀錄，已安全停用。':'✅ 獎勵已刪除。');
-  }catch(e){
-    console.error('刪除獎勵失敗:',e);
-    msg('rewardMsg','❌ 刪除失敗：'+(e.message||e));
-  }
-}
-
-function renderRewardsAdminList(){
-  const list=$('adminRewards');
-  if(!list)return;
-  const rows=growthRewards;
-  list.innerHTML=rows.length?rows.map(r=>'<article class="notice"><div class="date">'+(r.enabled?'🟢 啟用':'⚪ 停用')+' · '+esc(r.code)+'</div><h3>'+esc(r.icon||'🎁')+' '+esc(r.title)+'</h3><p>'+esc(r.description||'')+'</p><p><b>💎 '+Number(r.point_cost).toLocaleString()+' 點</b> · 最低等級：'+esc(r.min_level)+'</p><div class="competitionActions"><button class="btn secondary" type="button" onclick="editGrowthReward('+JSON.stringify(String(r.id))+')">✏️ 編輯</button> <button class="btn secondary" type="button" onclick="deleteGrowthReward('+JSON.stringify(String(r.id))+')">🗑️ 刪除</button></div></article>').join(''):'<div class="empty">目前沒有獎勵。</div>';
-}
-
 async function saveGrowthReward(){
-  const id=$('rewardId').value.trim()||null,code=$('rewardCode').value.trim(),title=$('rewardTitle').value.trim(),description=$('rewardDescription').value.trim(),icon=$('rewardIcon').value.trim()||'🎁',category=$('rewardCategory').value,point_cost=Number($('rewardPointCost').value),min_level=$('rewardMinLevel').value,required_achievement_id=$('rewardAchievement').value||null,user_limit=$('rewardUserLimit').value===''?null:Number($('rewardUserLimit').value),total_limit=$('rewardTotalLimit').value===''?null:Number($('rewardTotalLimit').value),coupon_title=$('rewardCouponTitle').value.trim()||null,coupon_description=$('rewardCouponDescription').value.trim()||null,coupon_discount=$('rewardCouponDiscount').value.trim()||null,coupon_expires_days=$('rewardCouponExpiresDays').value===''?null:Number($('rewardCouponExpiresDays').value),available_from=$('rewardAvailableFrom').value?new Date($('rewardAvailableFrom').value).toISOString():null,available_until=$('rewardAvailableUntil').value?new Date($('rewardAvailableUntil').value).toISOString():null,sort_order=Number($('rewardSortOrder').value||0),enabled=$('rewardEnabled').checked;
+  const id=$('rewardId').value.trim(),code=$('rewardCode').value.trim(),title=$('rewardTitle').value.trim(),description=$('rewardDescription').value.trim(),icon=$('rewardIcon').value.trim()||'🎁',category=$('rewardCategory').value,point_cost=Number($('rewardPointCost').value),min_level=$('rewardMinLevel').value,required_achievement_id=$('rewardAchievement').value||null,user_limit=$('rewardUserLimit').value===''?null:Number($('rewardUserLimit').value),total_limit=$('rewardTotalLimit').value===''?null:Number($('rewardTotalLimit').value),coupon_title=$('rewardCouponTitle').value.trim()||null,coupon_description=$('rewardCouponDescription').value.trim()||null,coupon_discount=$('rewardCouponDiscount').value.trim()||null,coupon_expires_days=$('rewardCouponExpiresDays').value===''?null:Number($('rewardCouponExpiresDays').value),available_from=$('rewardAvailableFrom').value?new Date($('rewardAvailableFrom').value).toISOString():null,available_until=$('rewardAvailableUntil').value?new Date($('rewardAvailableUntil').value).toISOString():null,sort_order=Number($('rewardSortOrder').value||0),enabled=$('rewardEnabled').checked;
   if(!code||!title||!Number.isInteger(point_cost)||point_cost<1){msg('rewardMsg','請完整填寫獎勵資料。');return}
   if(user_limit!==null&&(!Number.isInteger(user_limit)||user_limit<1)){msg('rewardMsg','每人上限必須是正整數。');return}
   if(total_limit!==null&&(!Number.isInteger(total_limit)||total_limit<1)){msg('rewardMsg','總兌換上限必須是正整數。');return}
   if(coupon_expires_days!==null&&(!Number.isInteger(coupon_expires_days)||coupon_expires_days<1)){msg('rewardMsg','優惠券有效天數必須是正整數。');return}
-  if(available_from&&available_until&&new Date(available_from)>=new Date(available_until)){msg('rewardMsg','開始時間必須早於結束時間。');return}
-  try{
-    msg('rewardMsg','⏳ 儲存中…');
-    const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_upsert_growth_reward',{method:'POST',headers:{...auth(),'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({p_reward_id:id,p_code:code,p_title:title,p_description:description,p_icon:icon,p_category:category,p_point_cost:point_cost,p_min_level:min_level,p_required_achievement_id:required_achievement_id,p_user_limit:user_limit,p_total_limit:total_limit,p_coupon_title:coupon_title,p_coupon_description:coupon_description,p_coupon_discount:coupon_discount,p_coupon_expires_days:coupon_expires_days,p_available_from:available_from,p_available_until:available_until,p_sort_order:sort_order,p_enabled:enabled})});
-    const d=await r.json().catch(()=>null);
-    if(!r.ok)throw new Error(d?.message||d?.hint||('HTTP '+r.status));
-    msg('rewardMsg',id?'✅ 獎勵已更新':'✅ 獎勵已新增');clearReward();await loadRewardManagers();
-  }catch(e){console.error('儲存獎勵失敗:',e);msg('rewardMsg','❌ 儲存失敗：'+(e.message||e))}
+  if(available_from&&available_until&&new Date(available_from)>=new Date(available_until)){msg('rewardMsg','開始時間必須早於結束時間。');return} const body={code,title,description,icon,category,reward_type:'coupon',point_cost,min_level,required_achievement_id,user_limit,total_limit,coupon_title,coupon_description,coupon_discount,coupon_expires_days,available_from,available_until,sort_order,enabled};
+  try{const r=await fetch(SUPABASE_URL+'/rest/v1/growth_rewards'+(id?'?id=eq.'+encodeURIComponent(id):''),{method:id?'PATCH':'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify(body)});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error(d?.message||d?.hint||('HTTP '+r.status));msg('rewardMsg',id?'✅ 獎勵已更新':'✅ 獎勵已新增');clearReward();await loadRewardManagers()}catch(e){msg('rewardMsg','❌ '+e.message)}
 }
 
 function editGrowthTask(id){const x=growthTasks.find(v=>v.id===id);if(!x)return;$('growthTaskId').value=x.id;$('growthTaskCode').value=x.code;$('growthTaskTitle').value=x.title;$('growthTaskDescription').value=x.description||'';$('growthTaskType').value=x.task_type;$('growthTaskCycle').value=x.cycle_type||'one_time';$('growthTaskStartAt').value=x.start_at?new Date(x.start_at).toISOString().slice(0,16):'';$('growthTaskEndAt').value=x.end_at?new Date(x.end_at).toISOString().slice(0,16):'';$('growthTaskRequirement').value=x.requirement_count;$('growthTaskReward').value=x.reward_points;$('growthTaskActive').checked=!!x.active;window.scrollTo({top:$('growthTab').offsetTop-20,behavior:'smooth'})}
@@ -665,12 +606,38 @@ function editGrowthAchievement(id){const x=growthAchievements.find(v=>v.id===id)
 async function saveGrowthAchievement(){const id=$('growthAchievementId').value.trim(),code=$('growthAchievementCode').value.trim(),title=$('growthAchievementTitle').value.trim(),description=$('growthAchievementDescription').value.trim(),icon=$('growthAchievementIcon').value.trim()||'🏆',rarity=$('growthAchievementRarity').value,hidden=$('growthAchievementHidden').checked,achievement_type=$('growthAchievementType').value,requirement_count=Number($('growthAchievementRequirement').value),reward_points=Number($('growthAchievementReward').value),active=$('growthAchievementActive').checked;if(!code||!title||!Number.isInteger(requirement_count)||requirement_count<1||!Number.isInteger(reward_points)||reward_points<0){msg('growthAchievementMsg','請完整填寫成就資料。');return}try{const body={code,title,description,icon,rarity,hidden,achievement_type,requirement_count,reward_points,active};const r=await fetch(SUPABASE_URL+'/rest/v1/growth_achievements'+(id?'?id=eq.'+encodeURIComponent(id):''),{method:id?'PATCH':'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify(body)});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error(d?.message||d?.hint||('HTTP '+r.status));msg('growthAchievementMsg',id?'✅ 成就已更新':'✅ 成就已新增');clearGrowthAchievement();await loadGrowthManagers()}catch(e){msg('growthAchievementMsg','❌ '+e.message)}}
 async function toggleGrowthAchievement(id,active){const r=await fetch(SUPABASE_URL+'/rest/v1/growth_achievements?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({active})});if(!r.ok){const d=await r.json().catch(()=>({}));alert('更新成就狀態失敗：'+(d.message||d.hint||('HTTP '+r.status)));return}await loadGrowthManagers()}
 
+async function loadGrowthResetHistory(uid){
+  const box=$('growthResetHistory'); if(!box) return;
+  if(!uid){box.innerHTML='<div class="empty">請先選擇會員。</div>';return;}
+  const r=await fetch(SUPABASE_URL+'/rest/v1/growth_reset_history?user_id=eq.'+encodeURIComponent(uid)+'&select=*&order=created_at.desc&limit=50',{headers:auth()});
+  const rows=r.ok?await r.json():[];
+  box.innerHTML=rows.length?rows.map(x=>'<article class="notice"><div class="date">第 '+esc(x.reset_no)+' 次 · '+esc(new Date(x.created_at).toLocaleString('zh-TW'))+'</div><h3>🔄 '+esc(x.before_level)+' → '+esc(x.after_level)+'　💎 '+esc(x.before_points)+' → '+esc(x.after_points)+'</h3><p>活躍：'+esc(x.before_active_days)+' 天 · 連續：'+esc(x.before_login_streak)+' 天 · 任務：'+esc(x.before_completed_tasks)+' · 成就：'+esc(x.before_achievements)+'</p><p class="sub">原因：'+esc(x.reason||'管理員手動重置')+'</p></article>').join(''):'<div class="empty">這位會員還沒有重置紀錄。</div>';
+}
+async function resetGrowthMember(){
+  const uid=$('growthResetMemberSelect')?.value;
+  const reason=($('growthResetReason')?.value||'').trim()||'管理員手動重置';
+  if(!uid){msg('growthResetMsg','請先選擇會員。');return;}
+  const m=growthMembers.find(x=>x.id===uid); const name=m?.nickname||m?.email||'這位會員';
+  const typed=prompt('這是完整重置，將把「'+name+'」的積分、等級、活躍／連續紀錄、任務與目前成就狀態清零。\n\n請輸入 RESET 確認：');
+  if(typed!=='RESET'){msg('growthResetMsg','已取消重置。');return;}
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_reset_growth_member',{method:'POST',headers:{...auth(),'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({p_user_id:uid,p_reason:reason})});
+    const d=await r.json().catch(()=>null);
+    if(!r.ok) throw new Error(d?.message||d?.hint||('HTTP '+r.status));
+    msg('growthResetMsg','✅ 已完成第 '+esc(d.reset_no)+' 次重置：'+esc(d.before_points)+' → 0 點，'+esc(d.before_level)+' → 新手。');
+    if($('growthResetReason'))$('growthResetReason').value='';
+    await growthAdmin();
+    const sel=$('growthResetMemberSelect'); if(sel)sel.value=uid;
+    await loadGrowthResetHistory(uid);
+  }catch(e){msg('growthResetMsg','❌ '+e.message)}
+}
 async function growthAdmin(){
   try{
     const vr=await fetch(SUPABASE_URL+'/rest/v1/visitor_accounts?select=id,email,active&order=created_at.asc',{headers:auth()}); const va=vr.ok?await vr.json():[];
     const pr=await fetch(SUPABASE_URL+'/rest/v1/profiles?select=id,member_no,nickname,growth_points,growth_level&order=member_no.asc',{headers:auth()}); const ps=pr.ok?await pr.json():[]; const pm=new Map(ps.map(x=>[x.id,x]));
     growthMembers=va.map(v=>({...v,...(pm.get(v.id)||{})}));
     const sel=$('growthMemberSelect'); if(sel){const q=($('growthMemberSearch')?.value||'').toLowerCase();const rows=growthMembers.filter(v=>!q||[v.email,v.nickname,v.member_no].some(x=>String(x||'').toLowerCase().includes(q)));sel.innerHTML=rows.map(v=>'<option value="'+esc(v.id)+'">會員 '+esc(v.member_no!=null?String(v.member_no).padStart(3,'0'):'—')+'｜'+esc(v.nickname||v.email||'—')+'｜💎 '+esc(v.growth_points||0)+'</option>').join('')||'<option value="">沒有符合的會員</option>'}
+    const rsel=$('growthResetMemberSelect'); if(rsel){rsel.innerHTML=growthMembers.map(v=>'<option value="'+esc(v.id)+'">會員 '+esc(v.member_no!=null?String(v.member_no).padStart(3,'0'):'—')+'｜'+esc(v.nickname||v.email||'—')+'｜💎 '+esc(v.growth_points||0)+'</option>').join('')||'<option value="">沒有會員</option>'; if(growthMembers[0]){rsel.value=growthMembers[0].id; await loadGrowthResetHistory(rsel.value)}}
     const counts={newbie:0,bronze:0,silver:0,gold:0,diamond:0}; growthMembers.forEach(v=>counts[v.growth_level||'newbie']=(counts[v.growth_level||'newbie']||0)+1);
     $('growthAdminSummary').innerHTML='<div class="competitionSummaryItem"><b>'+growthMembers.length+'</b><span>會員</span></div>'+Object.entries(counts).map(([k,n])=>'<div class="competitionSummaryItem"><b>'+n+'</b><span>'+({newbie:'🌱 新手',bronze:'⭐ 青銅',silver:'🥈 白銀',gold:'🥇 黃金',diamond:'💎 鑽石'}[k])+'</span></div>').join('');
     const lr=await fetch(SUPABASE_URL+'/rest/v1/growth_point_transactions?select=*&order=created_at.desc&limit=200',{headers:auth()}); growthLogs=lr.ok?await lr.json():[]; renderGrowthLogs(); await loadGrowthManagers();
@@ -689,5 +656,5 @@ function bind(){
   if($('couponSearch'))$('couponSearch').addEventListener('input',renderAdminCoupons);
   if($('supportSearch'))$('supportSearch').addEventListener('input',renderTickets); if($('supportStatusFilter'))$('supportStatusFilter').addEventListener('change',renderTickets);
   if($('competitionSearch'))$('competitionSearch').addEventListener('input',renderAdminCompetitions); if($('competitionStatusFilter'))$('competitionStatusFilter').addEventListener('change',renderAdminCompetitions); if($('competitionCategoryFilter'))$('competitionCategoryFilter').addEventListener('change',renderAdminCompetitions); if($('registrationSearch'))$('registrationSearch').addEventListener('input',renderCompetitionRegistrations); if($('exportCompetitionRegistrations'))$('exportCompetitionRegistrations').onclick=exportCompetitionRegistrations; if($('registrationStatusFilter'))$('registrationStatusFilter').addEventListener('change',renderCompetitionRegistrations);
-  if($('loginButton'))$('loginButton').onclick=login;if($('refreshDashboard'))$('refreshDashboard').onclick=dashboard;if($('logoutButton'))$('logoutButton').onclick=logout;if($('saveContent'))$('saveContent').onclick=save;if($('publishButton'))$('publishButton').onclick=publish;if($('saveProduct'))$('saveProduct').onclick=saveProduct;if($('clearProduct'))$('clearProduct').onclick=clearProduct;if($('createVisitor'))$('createVisitor').onclick=createVisitor;if($('refreshGrowthAdmin'))$('refreshGrowthAdmin').onclick=growthAdmin;if($('refreshRewardsAdmin'))$('refreshRewardsAdmin').onclick=loadRewardManagers;if($('saveReward'))$('saveReward').onclick=saveGrowthReward;if($('clearReward'))$('clearReward').onclick=clearReward;if($('adjustGrowthPoints'))$('adjustGrowthPoints').onclick=adjustGrowthPoints;if($('saveGrowthTask'))$('saveGrowthTask').onclick=saveGrowthTask;if($('clearGrowthTask'))$('clearGrowthTask').onclick=clearGrowthTask;if($('saveGrowthAchievement'))$('saveGrowthAchievement').onclick=saveGrowthAchievement;if($('clearGrowthAchievement'))$('clearGrowthAchievement').onclick=clearGrowthAchievement;if($('growthMemberSearch'))$('growthMemberSearch').addEventListener('input',growthAdmin);if($('growthLogSearch'))$('growthLogSearch').addEventListener('input',renderGrowthLogs);if($('growthLogFilter'))$('growthLogFilter').addEventListener('change',renderGrowthLogs);if($('setSharedVisitorPassword'))$('setSharedVisitorPassword').onclick=setSharedVisitorPassword;if($('createCoupon'))$('createCoupon').onclick=createCoupon;if($('createNotification'))$('createNotification').onclick=createNotification;if($('addCompetitionResult'))$('addCompetitionResult').onclick=()=>addCompetitionResult();if($('saveCompetition'))$('saveCompetition').onclick=saveCompetition;if($('publishCompetition'))$('publishCompetition').onclick=async()=>{const ok=await saveCompetition();const id=$('competitionId').value;if(ok&&id)await setCompetitionPublished(id,true)};if($('unpublishCompetition'))$('unpublishCompetition').onclick=async()=>{const id=$('competitionId').value;if(id)await setCompetitionPublished(id,false)};if($('clearCompetition'))$('clearCompetition').onclick=clearCompetition;if($('addCompetitionCategory'))$('addCompetitionCategory').onclick=addCompetitionCategory;if($('saveQuickLink'))$('saveQuickLink').onclick=saveQuickLink;if($('clearQuickLink'))$('clearQuickLink').onclick=clearQuickLink;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabPanel').forEach(x=>x.classList.add('hidden'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));$(b.dataset.tab).classList.remove('hidden');b.classList.add('active');if(b.dataset.tab==='dashboardTab')dashboard();if(b.dataset.tab==='newsTab')news();if(b.dataset.tab==='productTab')products();if(b.dataset.tab==='visitorTab')visitors();if(b.dataset.tab==='growthTab')growthAdmin();if(b.dataset.tab==='rewardTab')loadRewardManagers();if(b.dataset.tab==='couponTab')coupons();if(b.dataset.tab==='competitionTab'){competitionCategories();competitions();if(!$('competitionResults').children.length)addCompetitionResult()}if(b.dataset.tab==='quickLinkTab')quickLinks();if(b.dataset.tab==='supportTab')tickets();if(b.dataset.tab==='notificationTab')notifications()})}
+  if($('loginButton'))$('loginButton').onclick=login;if($('refreshDashboard'))$('refreshDashboard').onclick=dashboard;if($('logoutButton'))$('logoutButton').onclick=logout;if($('saveContent'))$('saveContent').onclick=save;if($('publishButton'))$('publishButton').onclick=publish;if($('saveProduct'))$('saveProduct').onclick=saveProduct;if($('clearProduct'))$('clearProduct').onclick=clearProduct;if($('createVisitor'))$('createVisitor').onclick=createVisitor;if($('refreshGrowthAdmin'))$('refreshGrowthAdmin').onclick=growthAdmin;if($('refreshRewardsAdmin'))$('refreshRewardsAdmin').onclick=loadRewardManagers;if($('saveReward'))$('saveReward').onclick=saveGrowthReward;if($('clearReward'))$('clearReward').onclick=clearReward;if($('adjustGrowthPoints'))$('adjustGrowthPoints').onclick=adjustGrowthPoints;if($('saveGrowthTask'))$('saveGrowthTask').onclick=saveGrowthTask;if($('clearGrowthTask'))$('clearGrowthTask').onclick=clearGrowthTask;if($('saveGrowthAchievement'))$('saveGrowthAchievement').onclick=saveGrowthAchievement;if($('clearGrowthAchievement'))$('clearGrowthAchievement').onclick=clearGrowthAchievement;if($('growthMemberSearch'))$('growthMemberSearch').addEventListener('input',growthAdmin);if($('resetGrowthMember'))$('resetGrowthMember').onclick=resetGrowthMember;if($('growthResetMemberSelect'))$('growthResetMemberSelect').addEventListener('change',e=>loadGrowthResetHistory(e.target.value));if($('growthLogSearch'))$('growthLogSearch').addEventListener('input',renderGrowthLogs);if($('growthLogFilter'))$('growthLogFilter').addEventListener('change',renderGrowthLogs);if($('setSharedVisitorPassword'))$('setSharedVisitorPassword').onclick=setSharedVisitorPassword;if($('createCoupon'))$('createCoupon').onclick=createCoupon;if($('createNotification'))$('createNotification').onclick=createNotification;if($('addCompetitionResult'))$('addCompetitionResult').onclick=()=>addCompetitionResult();if($('saveCompetition'))$('saveCompetition').onclick=saveCompetition;if($('publishCompetition'))$('publishCompetition').onclick=async()=>{const ok=await saveCompetition();const id=$('competitionId').value;if(ok&&id)await setCompetitionPublished(id,true)};if($('unpublishCompetition'))$('unpublishCompetition').onclick=async()=>{const id=$('competitionId').value;if(id)await setCompetitionPublished(id,false)};if($('clearCompetition'))$('clearCompetition').onclick=clearCompetition;if($('addCompetitionCategory'))$('addCompetitionCategory').onclick=addCompetitionCategory;if($('saveQuickLink'))$('saveQuickLink').onclick=saveQuickLink;if($('clearQuickLink'))$('clearQuickLink').onclick=clearQuickLink;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabPanel').forEach(x=>x.classList.add('hidden'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));$(b.dataset.tab).classList.remove('hidden');b.classList.add('active');if(b.dataset.tab==='dashboardTab')dashboard();if(b.dataset.tab==='newsTab')news();if(b.dataset.tab==='productTab')products();if(b.dataset.tab==='visitorTab')visitors();if(b.dataset.tab==='growthTab')growthAdmin();if(b.dataset.tab==='rewardTab')loadRewardManagers();if(b.dataset.tab==='couponTab')coupons();if(b.dataset.tab==='competitionTab'){competitionCategories();competitions();if(!$('competitionResults').children.length)addCompetitionResult()}if(b.dataset.tab==='quickLinkTab')quickLinks();if(b.dataset.tab==='supportTab')tickets();if(b.dataset.tab==='notificationTab')notifications()})}
 document.addEventListener('DOMContentLoaded',()=>{bindMobileAdminNav();bind();if(localStorage.getItem('access_token')){$('login').classList.add('hidden');$('dashboard').classList.remove('hidden');load()}else if(!configured())msg('loginError','請把你原本可用的 config.js 放回來。')});
