@@ -116,7 +116,27 @@ function couponStatus(c){
 }
 function couponCard(c){
   const s=couponStatus(c);
-  return '<article class="couponCard '+s.cls+'"><div class="couponTop"><span>'+esc(s.text)+'</span><span>🎟️</span></div><h3>'+esc(c.title)+'</h3><p>'+esc(c.description||'')+'</p>'+(c.discount?'<strong class="couponDiscount">'+esc(c.discount)+'</strong>':'')+'<div class="couponCode">'+esc(c.code)+'</div><div class="date">'+(c.expires_at?'有效至：'+esc(String(c.expires_at).slice(0,10)):'無期限')+'</div></article>';
+  const canUse=!c.used&&(!c.expires_at||new Date(c.expires_at)>=new Date());
+  return '<article class="couponCard '+s.cls+'"><div class="couponTop"><span>'+esc(s.text)+'</span><span>🎟️</span></div><h3>'+esc(c.title)+'</h3><p>'+esc(c.description||'')+'</p>'+(c.discount?'<strong class="couponDiscount">'+esc(c.discount)+'</strong>':'')+'<div class="couponCode">'+esc(c.code)+'</div><div class="date">'+(c.expires_at?'有效至：'+esc(String(c.expires_at).slice(0,10)):'無期限')+'</div>'+(canUse?'<button class="couponUseBtn" data-coupon-use="'+esc(c.id)+'">🎟️ 使用優惠券</button>':'')+'</article>';
+}
+
+async function useMyCoupon(id){
+  if(!id||!visitorToken())return;
+  if(!confirm('確定要使用這張優惠券嗎？\n使用後將無法再次使用。'))return;
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/use_growth_coupon',{method:'POST',headers:{...auth(),'Content-Type':'application/json'},body:JSON.stringify({p_coupon_id:id})});
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok||data.success===false){
+      alert('❌ 使用失敗：'+(data.error||data.message||'請稍後再試'));
+      return;
+    }
+    alert('✅ 優惠券已使用！');
+    await loadMyCoupons();
+    if($('overviewCouponCount'))loadMyOverview();
+  }catch(e){
+    console.error('使用優惠券例外:',e);
+    alert('❌ 使用失敗：請檢查網路連線後再試');
+  }
 }
 async function loadMyCoupons(){
   const box=$('myCoupons'), gate=$('couponGate');
@@ -135,6 +155,7 @@ async function loadMyCoupons(){
       return;
     }
     box.innerHTML=rows.length?rows.map(couponCard).join(''):'<div class="empty">目前沒有優惠券。</div>';
+    box.querySelectorAll('[data-coupon-use]').forEach(btn=>btn.addEventListener('click',()=>useMyCoupon(btn.dataset.couponUse)));
   }catch(e){
     console.error('優惠券載入例外:',e);
     box.innerHTML='<div class="empty">優惠券載入失敗，請重新整理後再試。</div>';
