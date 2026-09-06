@@ -575,42 +575,76 @@ let rewardAchievements=[];
 async function loadRewardManagers(){
   try{
     const [rr,ar,red]=await Promise.all([
-      fetch(SUPABASE_URL+'/rest/v1/growth_rewards?select=*&order=sort_order.asc,created_at.asc',{headers:auth()}),
+      fetch(SUPABASE_URL+'/rest/v1/growth_rewards?select=*&order=enabled.desc,sort_order.asc,created_at.asc',{headers:auth()}),
       fetch(SUPABASE_URL+'/rest/v1/growth_achievements?select=id,title&order=created_at.asc',{headers:auth()}),
-      fetch(SUPABASE_URL+'/rest/v1/growth_reward_redemptions?select=*,growth_rewards(title)&order=created_at.desc&limit=200',{headers:auth()})
+      fetch(SUPABASE_URL+'/rest/v1/growth_reward_redemptions?select=reward_id,status&order=created_at.desc&limit=1000',{headers:auth()})
     ]);
-    growthRewards=rr.ok?await rr.json():[]; rewardAchievements=ar.ok?await ar.json():[];
+    if(!rr.ok){const d=await rr.json().catch(()=>({}));throw new Error(d.message||d.hint||('載入獎勵失敗 HTTP '+rr.status));}
+    growthRewards=await rr.json(); rewardAchievements=ar.ok?await ar.json():[];
     const reds=red.ok?await red.json():[];
-    const sel=$('rewardAchievement'); if(sel){const old=sel.value;sel.innerHTML='<option value="">無</option>'+rewardAchievements.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.title)+'</option>').join('');sel.value=old;}
-    $('adminRewards').innerHTML=growthRewards.length?growthRewards.map(r=>{const ach=rewardAchievements.find(a=>a.id===r.required_achievement_id);return '<article class="notice"><div class="date">'+(r.enabled?'🟢 啟用':'⚪ 停用')+' · '+esc(r.code)+'</div><h3>'+esc(r.icon||'🎁')+' '+esc(r.title)+'</h3><p>'+esc(r.description||'')+'</p><p><b>💎 '+Number(r.point_cost).toLocaleString()+' 點</b> · 最低等級：'+esc(r.min_level)+(ach?' · 成就：'+esc(ach.title):'')+'</p><p class="sub">每人上限：'+(r.user_limit??'不限')+' · 總上限：'+(r.total_limit??'不限')+'</p><div class="competitionActions"><button class="btn secondary" type="button" onclick="editGrowthReward('+JSON.stringify(String(r.id))+')">✏️ 編輯</button> <button class="btn secondary" type="button" onclick="deleteGrowthReward('+JSON.stringify(String(r.id))+')">🗑️ 刪除</button></div></article>'}).join(''):'<div class="empty">目前沒有獎勵。</div>';
-    $('adminRewardRedemptions').innerHTML=reds.length?reds.map(x=>'<article class="notice"><div class="date">'+esc(new Date(x.created_at).toLocaleString('zh-TW'))+'</div><h3>🎁 '+esc(x.growth_rewards?.title||'會員獎勵')+'</h3><p>會員：'+esc(x.user_id)+' · '+esc(x.status==='redeemed'?'已兌換':'已取消')+'</p><p>扣除 💎 '+esc(x.point_cost)+' 點'+(x.coupon_id?' · 已產生優惠券':'')+'</p></article>').join(''):'<div class="empty">尚無兌換紀錄。</div>';
+    const redemptionCount=new Map();
+    reds.forEach(x=>redemptionCount.set(String(x.reward_id),(redemptionCount.get(String(x.reward_id))||0)+1));
+    const sel=$('rewardAchievement');
+    if(sel){const old=sel.value;sel.innerHTML='<option value="">無</option>'+rewardAchievements.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.title)+'</option>').join('');sel.value=old;}
+    $('adminRewards').innerHTML=growthRewards.length?growthRewards.map(r=>{
+      const ach=rewardAchievements.find(a=>a.id===r.required_achievement_id);
+      const redeemed=redemptionCount.get(String(r.id))||0;
+      const availability=[
+        r.available_from?'開始 '+new Date(r.available_from).toLocaleString('zh-TW'):null,
+        r.available_until?'結束 '+new Date(r.available_until).toLocaleString('zh-TW'):null
+      ].filter(Boolean).join(' · ');
+      return '<article class="notice"><div class="date">'+(r.enabled?'🟢 啟用':'⚪ 停用')+' · '+esc(r.code)+'</div>'+
+        '<h3>'+esc(r.icon||'🎁')+' '+esc(r.title)+'</h3>'+
+        '<p>'+esc(r.description||'')+'</p>'+
+        '<p><b>💎 '+Number(r.point_cost).toLocaleString()+' 點</b> · 最低等級：'+esc(r.min_level)+(ach?' · 成就：'+esc(ach.title):'')+'</p>'+
+        '<p class="sub">每人上限：'+(r.user_limit??'不限')+' · 總上限：'+(r.total_limit??'不限')+' · 已兌換：'+redeemed+(availability?' · '+esc(availability):'')+'</p>'+
+        '<div class="competitionActions"><button class="btn secondary" type="button" onclick="editGrowthReward('+JSON.stringify(String(r.id))+')">✏️ 編輯</button> '+
+        '<button class="btn secondary" type="button" onclick="deleteGrowthReward('+JSON.stringify(String(r.id))+')">🗑️ 刪除</button></div></article>';
+    }).join(''):'<div class="empty">目前沒有獎勵。</div>';
+    $('adminRewardRedemptions').innerHTML=reds.length?reds.map(x=>'<article class="notice"><div class="date">'+esc(new Date(x.created_at||Date.now()).toLocaleString('zh-TW'))+'</div><p>獎勵 ID：'+esc(x.reward_id)+' · '+esc(x.status==='redeemed'?'已兌換':(x.status||'紀錄'))+'</p></article>').join(''):'<div class="empty">尚無兌換紀錄。</div>';
   }catch(e){console.error('獎勵管理載入失敗:',e);msg('rewardMsg','❌ '+e.message)}
 }
+
 function editGrowthReward(id){const x=growthRewards.find(v=>v.id===id);if(!x)return;$('rewardId').value=x.id;$('rewardCode').value=x.code;$('rewardTitle').value=x.title;$('rewardDescription').value=x.description||'';$('rewardIcon').value=x.icon||'🎁';$('rewardCategory').value=x.category||'other';$('rewardPointCost').value=x.point_cost;$('rewardMinLevel').value=x.min_level||'newbie';$('rewardAchievement').value=x.required_achievement_id||'';$('rewardUserLimit').value=x.user_limit??'';$('rewardTotalLimit').value=x.total_limit??'';$('rewardCouponTitle').value=x.coupon_title||'';$('rewardCouponDescription').value=x.coupon_description||'';$('rewardCouponDiscount').value=x.coupon_discount||'';$('rewardCouponExpiresDays').value=x.coupon_expires_days??'';$('rewardAvailableFrom').value=x.available_from?new Date(x.available_from).toISOString().slice(0,16):'';$('rewardAvailableUntil').value=x.available_until?new Date(x.available_until).toISOString().slice(0,16):'';$('rewardSortOrder').value=x.sort_order??0;$('rewardEnabled').checked=!!x.enabled;window.scrollTo({top:$('rewardTab').offsetTop-20,behavior:'smooth'})}
 function clearReward(){$('rewardId').value='';['rewardCode','rewardTitle','rewardDescription','rewardCouponTitle','rewardCouponDescription','rewardCouponDiscount','rewardUserLimit','rewardTotalLimit','rewardCouponExpiresDays','rewardAvailableFrom','rewardAvailableUntil'].forEach(id=>$(id).value='');$('rewardIcon').value='🎁';$('rewardCategory').value='cash';$('rewardPointCost').value=50;$('rewardMinLevel').value='newbie';$('rewardAchievement').value='';$('rewardSortOrder').value=0;$('rewardEnabled').checked=true}
 async function deleteGrowthReward(id){
   if(!id)return;
   const item=growthRewards.find(x=>String(x.id)===String(id));
-  if(!confirm('確定要刪除「'+(item?.title||'這個獎勵')+'」？\n\n若已有會員兌換過，系統會改為停用並保留兌換紀錄。'))return;
+  const title=item?.title||'這個獎勵';
+  if(!confirm('確定要刪除「'+title+'」？'))return;
   try{
-    const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_delete_growth_reward',{method:'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify({p_reward_id:id})});
-    const d=await r.json().catch(()=>null);
-    if(!r.ok)throw new Error(d?.message||d?.details||d?.hint||('HTTP '+r.status));
-    if(d?.action==='disabled'){
-      // 有歷史兌換紀錄時，資料庫會安全停用；管理員介面則立即隱藏，讓「刪除」操作符合直覺。
+    msg('rewardMsg','⏳ 正在處理刪除…');
+    // 先查是否有兌換紀錄；有紀錄時不真正刪除，以免破壞歷史資料。
+    const cr=await fetch(SUPABASE_URL+'/rest/v1/growth_reward_redemptions?select=id&reward_id=eq.'+encodeURIComponent(id)+'&limit=1',{headers:auth()});
+    if(!cr.ok){const d=await cr.json().catch(()=>({}));throw new Error(d.message||d.hint||('查詢兌換紀錄失敗 HTTP '+cr.status));}
+    const history=await cr.json();
+    if(history.length){
+      const r=await fetch(SUPABASE_URL+'/rest/v1/growth_rewards?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{...auth(),Prefer:'return=minimal'},body:JSON.stringify({enabled:false})});
+      if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.message||d.hint||('停用獎勵失敗 HTTP '+r.status));}
       growthRewards=growthRewards.filter(x=>String(x.id)!==String(id));
-      msg('rewardMsg','⚠️ 此獎勵已有兌換紀錄，已停用並從獎勵列表移除；歷史兌換紀錄仍保留。');
-    }else{
-      growthRewards=growthRewards.filter(x=>String(x.id)!==String(id));
-      msg('rewardMsg','✅ 獎勵已刪除。');
+      renderRewardsAdminList();
+      msg('rewardMsg','⚠️ 已有兌換紀錄，已安全停用並從列表移除。');
+      clearReward();
+      return;
     }
+    const r=await fetch(SUPABASE_URL+'/rest/v1/growth_rewards?id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:{...auth(),Prefer:'return=minimal'}});
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.message||d.hint||('刪除獎勵失敗 HTTP '+r.status));}
+    growthRewards=growthRewards.filter(x=>String(x.id)!==String(id));
+    renderRewardsAdminList();
+    msg('rewardMsg','✅ 獎勵已刪除。');
     clearReward();
-    // 重新載入時仍會取得停用項目，因此這裡不立即重刷，避免剛刪除又出現在列表。
   }catch(e){
     console.error('刪除獎勵失敗:',e);
     msg('rewardMsg','❌ 刪除失敗：'+(e.message||e));
   }
 }
+function renderRewardsAdminList(){
+  const list=$('adminRewards');
+  if(!list)return;
+  const rows=growthRewards;
+  list.innerHTML=rows.length?rows.map(r=>'<article class="notice"><div class="date">'+(r.enabled?'🟢 啟用':'⚪ 停用')+' · '+esc(r.code)+'</div><h3>'+esc(r.icon||'🎁')+' '+esc(r.title)+'</h3><p>'+esc(r.description||'')+'</p><p><b>💎 '+Number(r.point_cost).toLocaleString()+' 點</b> · 最低等級：'+esc(r.min_level)+'</p><div class="competitionActions"><button class="btn secondary" type="button" onclick="editGrowthReward('+JSON.stringify(String(r.id))+')">✏️ 編輯</button> <button class="btn secondary" type="button" onclick="deleteGrowthReward('+JSON.stringify(String(r.id))+')">🗑️ 刪除</button></div></article>').join(''):'<div class="empty">目前沒有獎勵。</div>';
+}
+
 async function saveGrowthReward(){
   const id=$('rewardId').value.trim(),code=$('rewardCode').value.trim(),title=$('rewardTitle').value.trim(),description=$('rewardDescription').value.trim(),icon=$('rewardIcon').value.trim()||'🎁',category=$('rewardCategory').value,point_cost=Number($('rewardPointCost').value),min_level=$('rewardMinLevel').value,required_achievement_id=$('rewardAchievement').value||null,user_limit=$('rewardUserLimit').value===''?null:Number($('rewardUserLimit').value),total_limit=$('rewardTotalLimit').value===''?null:Number($('rewardTotalLimit').value),coupon_title=$('rewardCouponTitle').value.trim()||null,coupon_description=$('rewardCouponDescription').value.trim()||null,coupon_discount=$('rewardCouponDiscount').value.trim()||null,coupon_expires_days=$('rewardCouponExpiresDays').value===''?null:Number($('rewardCouponExpiresDays').value),available_from=$('rewardAvailableFrom').value?new Date($('rewardAvailableFrom').value).toISOString():null,available_until=$('rewardAvailableUntil').value?new Date($('rewardAvailableUntil').value).toISOString():null,sort_order=Number($('rewardSortOrder').value||0),enabled=$('rewardEnabled').checked;
   if(!code||!title||!Number.isInteger(point_cost)||point_cost<1){msg('rewardMsg','請完整填寫獎勵資料。');return}
