@@ -589,15 +589,27 @@ async function loadRewardManagers(){
 function editGrowthReward(id){const x=growthRewards.find(v=>v.id===id);if(!x)return;$('rewardId').value=x.id;$('rewardCode').value=x.code;$('rewardTitle').value=x.title;$('rewardDescription').value=x.description||'';$('rewardIcon').value=x.icon||'🎁';$('rewardCategory').value=x.category||'other';$('rewardPointCost').value=x.point_cost;$('rewardMinLevel').value=x.min_level||'newbie';$('rewardAchievement').value=x.required_achievement_id||'';$('rewardUserLimit').value=x.user_limit??'';$('rewardTotalLimit').value=x.total_limit??'';$('rewardCouponTitle').value=x.coupon_title||'';$('rewardCouponDescription').value=x.coupon_description||'';$('rewardCouponDiscount').value=x.coupon_discount||'';$('rewardCouponExpiresDays').value=x.coupon_expires_days??'';$('rewardAvailableFrom').value=x.available_from?new Date(x.available_from).toISOString().slice(0,16):'';$('rewardAvailableUntil').value=x.available_until?new Date(x.available_until).toISOString().slice(0,16):'';$('rewardSortOrder').value=x.sort_order??0;$('rewardEnabled').checked=!!x.enabled;window.scrollTo({top:$('rewardTab').offsetTop-20,behavior:'smooth'})}
 function clearReward(){$('rewardId').value='';['rewardCode','rewardTitle','rewardDescription','rewardCouponTitle','rewardCouponDescription','rewardCouponDiscount','rewardUserLimit','rewardTotalLimit','rewardCouponExpiresDays','rewardAvailableFrom','rewardAvailableUntil'].forEach(id=>$(id).value='');$('rewardIcon').value='🎁';$('rewardCategory').value='cash';$('rewardPointCost').value=50;$('rewardMinLevel').value='newbie';$('rewardAchievement').value='';$('rewardSortOrder').value=0;$('rewardEnabled').checked=true}
 async function deleteGrowthReward(id){
-  if(!confirm('確定要刪除這個獎勵？\n\n若已有會員兌換過，系統會改為停用並保留兌換紀錄，不會破壞歷史資料。'))return;
+  if(!id)return;
+  const item=growthRewards.find(x=>String(x.id)===String(id));
+  if(!confirm('確定要刪除「'+(item?.title||'這個獎勵')+'」？\n\n若已有會員兌換過，系統會改為停用並保留兌換紀錄。'))return;
   try{
     const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_delete_growth_reward',{method:'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify({p_reward_id:id})});
     const d=await r.json().catch(()=>null);
-    if(!r.ok)throw new Error(d?.message||d?.hint||('HTTP '+r.status));
-    msg('rewardMsg',d?.action==='disabled'?'⚠️ 此獎勵已有兌換紀錄，已安全停用並保留歷史紀錄。':'✅ 獎勵已刪除。');
+    if(!r.ok)throw new Error(d?.message||d?.details||d?.hint||('HTTP '+r.status));
+    if(d?.action==='disabled'){
+      // 有歷史兌換紀錄時，資料庫會安全停用；管理員介面則立即隱藏，讓「刪除」操作符合直覺。
+      growthRewards=growthRewards.filter(x=>String(x.id)!==String(id));
+      msg('rewardMsg','⚠️ 此獎勵已有兌換紀錄，已停用並從獎勵列表移除；歷史兌換紀錄仍保留。');
+    }else{
+      growthRewards=growthRewards.filter(x=>String(x.id)!==String(id));
+      msg('rewardMsg','✅ 獎勵已刪除。');
+    }
     clearReward();
-    await loadRewardManagers();
-  }catch(e){msg('rewardMsg','❌ 刪除失敗：'+e.message)}
+    // 重新載入時仍會取得停用項目，因此這裡不立即重刷，避免剛刪除又出現在列表。
+  }catch(e){
+    console.error('刪除獎勵失敗:',e);
+    msg('rewardMsg','❌ 刪除失敗：'+(e.message||e));
+  }
 }
 async function saveGrowthReward(){
   const id=$('rewardId').value.trim(),code=$('rewardCode').value.trim(),title=$('rewardTitle').value.trim(),description=$('rewardDescription').value.trim(),icon=$('rewardIcon').value.trim()||'🎁',category=$('rewardCategory').value,point_cost=Number($('rewardPointCost').value),min_level=$('rewardMinLevel').value,required_achievement_id=$('rewardAchievement').value||null,user_limit=$('rewardUserLimit').value===''?null:Number($('rewardUserLimit').value),total_limit=$('rewardTotalLimit').value===''?null:Number($('rewardTotalLimit').value),coupon_title=$('rewardCouponTitle').value.trim()||null,coupon_description=$('rewardCouponDescription').value.trim()||null,coupon_discount=$('rewardCouponDiscount').value.trim()||null,coupon_expires_days=$('rewardCouponExpiresDays').value===''?null:Number($('rewardCouponExpiresDays').value),available_from=$('rewardAvailableFrom').value?new Date($('rewardAvailableFrom').value).toISOString():null,available_until=$('rewardAvailableUntil').value?new Date($('rewardAvailableUntil').value).toISOString():null,sort_order=Number($('rewardSortOrder').value||0),enabled=$('rewardEnabled').checked;
