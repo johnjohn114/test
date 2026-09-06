@@ -10,3 +10,9 @@
 資料庫：請先執行 REWARD_CENTER_V1_SQL.sql，再重新整理 Supabase schema cache（SQL 已包含 notify pgrst, reload schema）。
 
 注意：本版只新增獎勵中心，不覆蓋會員成長 v2／第2階段活躍彩蛋功能。
+
+
+【獎勵中心 v1.1 修正版】
+- 修正 coupons.html 使用舊版 app.js 快取版本（v22 → v24）。
+- 強化「我的優惠券」載入錯誤處理，避免 API 失敗時直接顯示空白。
+- 不需要重新執行獎勵中心 SQL；資料庫已成功兌換的優惠券可直接重新整理查看。

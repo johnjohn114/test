@@ -125,9 +125,20 @@ async function loadMyCoupons(){
     box.classList.add('hidden'); gate?.classList.remove('hidden'); return;
   }
   gate?.classList.add('hidden'); box.classList.remove('hidden');
-  const r=await fetch(SUPABASE_URL+'/rest/v1/coupons?select=*&order=created_at.desc',{headers:auth()});
-  const rows=r.ok?await r.json():[];
-  box.innerHTML=rows.length?rows.map(couponCard).join(''):'<div class="empty">目前沒有優惠券。</div>';
+  box.innerHTML='<div class="loading">正在載入優惠券…</div>';
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/coupons?select=*&order=created_at.desc',{headers:auth()});
+    const rows=r.ok?await r.json():[];
+    if(!r.ok){
+      console.error('優惠券載入失敗:',r.status,rows);
+      box.innerHTML='<div class="empty">優惠券載入失敗，請重新整理後再試。</div>';
+      return;
+    }
+    box.innerHTML=rows.length?rows.map(couponCard).join(''):'<div class="empty">目前沒有優惠券。</div>';
+  }catch(e){
+    console.error('優惠券載入例外:',e);
+    box.innerHTML='<div class="empty">優惠券載入失敗，請重新整理後再試。</div>';
+  }
 }
 
 async function loadCompetitionMenu(){
