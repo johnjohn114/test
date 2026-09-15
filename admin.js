@@ -657,8 +657,31 @@ function editVideo(id){const v=adminVideos.find(x=>x.id===id);if(!v)return;$('vi
 async function saveVideo(){const id=$('videoId').value.trim(),title=$('videoTitle').value.trim(),youtube_url=$('videoUrl').value.trim(),youtube_id=parseYouTubeId(youtube_url),description=$('videoDescription').value.trim(),category=$('videoCategoryInput').value,sort_order=Number($('videoSortOrder').value||0),featured=$('videoFeatured').checked,published=$('videoPublished').checked;if(!title||!youtube_url||!youtube_id){msg('videoMsg','請填寫標題與有效的 YouTube 網址。');return}try{const payload={...(id?{id}:{}),title,description,youtube_url,youtube_id,thumbnail_url:'https://img.youtube.com/vi/'+youtube_id+'/hqdefault.jpg',category,sort_order,featured,published,published_at:new Date().toISOString()};const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_upsert_video',{method:'POST',headers:{...auth(),'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({p_video:payload})});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error(d?.message||d?.hint||('HTTP '+r.status));msg('videoMsg',id?'✅ 影片已更新':'✅ 影片已新增');clearVideo();await loadVideosAdmin()}catch(e){msg('videoMsg','❌ '+e.message)}}
 async function deleteVideo(id){if(!confirm('確定刪除這部影片？'))return;try{const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_delete_video',{method:'POST',headers:{...auth(),'Content-Type':'application/json'},body:JSON.stringify({p_video_id:id})});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error(d?.message||d?.hint||('HTTP '+r.status));await loadVideosAdmin()}catch(e){alert('❌ 刪除失敗：'+e.message)}}
 
+function recoverStoredSession(){
+  // 支援自有登入欄位，也支援 Supabase JS 常見的 sb-*-auth-token session。
+  let access=localStorage.getItem('access_token');
+  let refresh=localStorage.getItem('refresh_token');
+  if(access)return {access,refresh};
+  for(const key of Object.keys(localStorage)){
+    if(!key.includes('auth-token'))continue;
+    try{
+      const raw=JSON.parse(localStorage.getItem(key)||'null');
+      const session=raw?.currentSession||raw?.session||raw;
+      if(session?.access_token){
+        access=session.access_token;
+        refresh=session.refresh_token||refresh;
+        localStorage.setItem('access_token',access);
+        if(refresh)localStorage.setItem('refresh_token',refresh);
+        return {access,refresh};
+      }
+    }catch(e){}
+  }
+  return {access:null,refresh};
+}
+
 async function refreshAccessToken(){
-  const refreshToken=localStorage.getItem('refresh_token');
+  const stored=recoverStoredSession();
+  const refreshToken=stored.refresh;
   if(!refreshToken)return false;
   try{
     const r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{
@@ -675,7 +698,7 @@ async function refreshAccessToken(){
 }
 
 async function callAiAnnouncement(payload){
-  let token=localStorage.getItem('access_token');
+  let token=recoverStoredSession().access;
   if(!token){
     const refreshed=await refreshAccessToken();
     if(refreshed)token=localStorage.getItem('access_token');
@@ -718,7 +741,7 @@ async function generateAiAnnouncement(){
     msg('aiAnnouncementMsg','✅ 產生完成。你可以修改後套用到公告編輯器。');
   }catch(e){
     console.error(e);
-    if(String(e.message).includes('重新登入')){msg('aiAnnouncementMsg','❌ '+e.message);logout();return}
+    if(String(e.message).includes('登入狀態不存在')){msg('aiAnnouncementMsg','❌ 目前瀏覽器沒有可用的管理員登入 Session。請先重新登入一次，再按 AI 產生。');return}
     msg('aiAnnouncementMsg','❌ '+e.message);
   }finally{if(btn)btn.disabled=false}
 }
