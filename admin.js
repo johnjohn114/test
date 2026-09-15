@@ -657,18 +657,70 @@ function editVideo(id){const v=adminVideos.find(x=>x.id===id);if(!v)return;$('vi
 async function saveVideo(){const id=$('videoId').value.trim(),title=$('videoTitle').value.trim(),youtube_url=$('videoUrl').value.trim(),youtube_id=parseYouTubeId(youtube_url),description=$('videoDescription').value.trim(),category=$('videoCategoryInput').value,sort_order=Number($('videoSortOrder').value||0),featured=$('videoFeatured').checked,published=$('videoPublished').checked;if(!title||!youtube_url||!youtube_id){msg('videoMsg','請填寫標題與有效的 YouTube 網址。');return}try{const payload={...(id?{id}:{}),title,description,youtube_url,youtube_id,thumbnail_url:'https://img.youtube.com/vi/'+youtube_id+'/hqdefault.jpg',category,sort_order,featured,published,published_at:new Date().toISOString()};const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_upsert_video',{method:'POST',headers:{...auth(),'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({p_video:payload})});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error(d?.message||d?.hint||('HTTP '+r.status));msg('videoMsg',id?'✅ 影片已更新':'✅ 影片已新增');clearVideo();await loadVideosAdmin()}catch(e){msg('videoMsg','❌ '+e.message)}}
 async function deleteVideo(id){if(!confirm('確定刪除這部影片？'))return;try{const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_delete_video',{method:'POST',headers:{...auth(),'Content-Type':'application/json'},body:JSON.stringify({p_video_id:id})});const d=await r.json().catch(()=>null);if(!r.ok)throw new Error(d?.message||d?.hint||('HTTP '+r.status));await loadVideosAdmin()}catch(e){alert('❌ 刪除失敗：'+e.message)}}
 
+async function refreshAccessToken(){
+  const refreshToken=localStorage.getItem('refresh_token');
+  if(!refreshToken)return false;
+  try{
+    const r=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=refresh_token',{
+      method:'POST',
+      headers:{'Content-Type':'application/json',apikey:SUPABASE_ANON_KEY},
+      body:JSON.stringify({refresh_token:refreshToken})
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.access_token)return false;
+    localStorage.setItem('access_token',d.access_token);
+    if(d.refresh_token)localStorage.setItem('refresh_token',d.refresh_token);
+    return true;
+  }catch(e){console.error('refresh token:',e);return false}
+}
+
+async function callAiAnnouncement(payload){
+  let token=localStorage.getItem('access_token');
+  if(!token){
+    const refreshed=await refreshAccessToken();
+    if(refreshed)token=localStorage.getItem('access_token');
+  }
+  if(!token)throw new Error('登入狀態不存在，請重新登入管理後台。');
+
+  const request=()=>fetch(SUPABASE_URL+'/functions/v1/ai-generate-announcement',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'apikey':SUPABASE_ANON_KEY,
+      'Authorization':'Bearer '+token
+    },
+    body:JSON.stringify(payload)
+  });
+
+  let r=await request();
+  if(r.status===401){
+    const refreshed=await refreshAccessToken();
+    if(refreshed){
+      token=localStorage.getItem('access_token');
+      r=await request();
+    }
+  }
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){
+    throw new Error(d?.error||d?.message||d?.detail||('HTTP '+r.status));
+  }
+  return d;
+}
+
 async function generateAiAnnouncement(){
-  if(!configured()||!localStorage.getItem('access_token')){msg('aiAnnouncementMsg','❌ 請先登入管理後台。');return}
+  if(!configured()){msg('aiAnnouncementMsg','❌ Supabase 尚未設定。');return}
   const topic=$('aiTopic')?.value.trim()||'', eventInfo=$('aiEventInfo')?.value.trim()||'', audience=$('aiAudience')?.value.trim()||'', importantNotes=$('aiImportantNotes')?.value.trim()||'', style=$('aiStyle')?.value||'活潑';
   if(!topic){msg('aiAnnouncementMsg','請先輸入公告主題。');return}
   const btn=$('generateAiAnnouncement'); if(btn)btn.disabled=true; msg('aiAnnouncementMsg','🤖 AI 正在撰寫公告…');
   try{
-    const r=await fetch(SUPABASE_URL+'/functions/v1/ai-generate-announcement',{method:'POST',headers:{...auth()},body:JSON.stringify({topic,event_info:eventInfo,audience,important_notes:importantNotes,style})});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok)throw new Error(d?.message||('HTTP '+r.status));
+    const d=await callAiAnnouncement({topic,event_info:eventInfo,audience,important_notes:importantNotes,style});
     $('aiGeneratedTitle').value=d.title||'';$('aiGeneratedSummary').value=d.summary||'';$('aiGeneratedContent').value=d.content||'';
     msg('aiAnnouncementMsg','✅ 產生完成。你可以修改後套用到公告編輯器。');
-  }catch(e){console.error(e);msg('aiAnnouncementMsg','❌ '+e.message)}finally{if(btn)btn.disabled=false}
+  }catch(e){
+    console.error(e);
+    if(String(e.message).includes('重新登入')){msg('aiAnnouncementMsg','❌ '+e.message);logout();return}
+    msg('aiAnnouncementMsg','❌ '+e.message);
+  }finally{if(btn)btn.disabled=false}
 }
 function clearAiAnnouncement(){['aiTopic','aiEventInfo','aiAudience','aiImportantNotes','aiGeneratedTitle','aiGeneratedSummary','aiGeneratedContent'].forEach(id=>{if($(id))$(id).value=''});if($('aiStyle'))$('aiStyle').value='活潑';msg('aiAnnouncementMsg','')}
 function applyAiAnnouncement(){
