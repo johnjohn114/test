@@ -518,14 +518,34 @@ async function setCompetitionPublished(id,published){
 async function loadCompetitionAttendance(competitionId){
   const panel=$('competitionAttendancePanel'),box=$('competitionAttendance'); if(!panel||!box||!competitionId)return;
   panel.classList.remove('hidden'); panel.dataset.competitionId=competitionId;
-  const r=await fetch(SUPABASE_URL+'/rest/v1/competition_attendance?select=*&competition_id=eq.'+encodeURIComponent(competitionId)+'&order=created_at.asc',{headers:auth()});
-  const rows=r.ok?await r.json():[]; window.__competitionAttendance=rows; renderCompetitionAttendance();
+  try{
+    const [rr,ar,pr]=await Promise.all([
+      fetch(SUPABASE_URL+'/rest/v1/competition_registrations?select=id,user_id,member_no,nickname,email,status,created_at&competition_id=eq.'+encodeURIComponent(competitionId)+'&status=in.(active,approved)&order=created_at.asc',{headers:auth()}),
+      fetch(SUPABASE_URL+'/rest/v1/competition_attendance?select=*&competition_id=eq.'+encodeURIComponent(competitionId)+'&order=created_at.asc',{headers:auth()}),
+      fetch(SUPABASE_URL+'/rest/v1/profiles?select=id,member_no,nickname&role=eq.visitor',{headers:auth()})
+    ]);
+    const regs=rr.ok?await rr.json():[]; const atts=ar.ok?await ar.json():[]; const profiles=pr.ok?await pr.json():[];
+    const pm=new Map(profiles.map(x=>[x.id,x])); const am=new Map(atts.map(x=>[x.user_id,x]));
+    window.__competitionAttendance=regs.map(r=>({...r,profile:pm.get(r.user_id)||{},attendance:am.get(r.user_id)||null}));
+    if(!rr.ok||!ar.ok)msg('competitionMsg','⚠️ 簽到資料讀取失敗，請確認已執行 V2 SQL。');
+    renderCompetitionAttendance();
+  }catch(e){console.error(e);msg('competitionMsg','❌ 簽到資料載入失敗：'+e.message)}
 }
 function renderCompetitionAttendance(){
-  const box=$('competitionAttendance'); if(!box)return; const a=window.__competitionAttendance||[]; const st=$('attendanceStatusFilter')?.value||'all'; const rows=a.filter(x=>st==='all'||x.status===st); const counts={checked_in:0,late:0,no_show:0,cancelled:0}; a.forEach(x=>counts[x.status]=(counts[x.status]||0)+1); if($('competitionAttendanceSummary'))$('competitionAttendanceSummary').innerHTML='<div class="competitionSummaryItem"><b>'+a.length+'</b><span>紀錄</span></div><div class="competitionSummaryItem"><b>'+counts.checked_in+'</b><span>已簽到</span></div><div class="competitionSummaryItem"><b>'+counts.late+'</b><span>遲到</span></div><div class="competitionSummaryItem"><b>'+counts.no_show+'</b><span>未到</span></div>';
-  box.innerHTML=rows.map(x=>'<article class="notice"><div class="date">'+esc({checked_in:'🟢 已簽到',late:'🟡 遲到',no_show:'🔴 未到',cancelled:'⚪ 取消'}[x.status]||x.status)+' · '+esc(x.checked_in_at?new Date(x.checked_in_at).toLocaleString('zh-TW'):'—')+'</div><h3>會員 '+esc(x.user_id||'')+'</h3><p>獎勵積分：'+esc(x.points_awarded||0)+' · '+esc(x.note||'')+'</p><div class="competitionActions"><button class="btn secondary" data-att-status="checked_in" data-att-id="'+esc(x.id)+'">已到</button><button class="btn secondary" data-att-status="late" data-att-id="'+esc(x.id)+'">遲到</button><button class="btn secondary" data-att-status="no_show" data-att-id="'+esc(x.id)+'">未到</button></div></article>').join('')||'<div class="empty">目前沒有簽到紀錄。</div>';
-  box.querySelectorAll('[data-att-status]').forEach(b=>b.onclick=async()=>{const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_mark_competition_attendance',{method:'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify({p_attendance_id:b.dataset.attId,p_status:b.dataset.attStatus,p_note:null})});if(!r.ok){msg('competitionMsg','❌ 更新簽到失敗');return}await loadCompetitionAttendance(panel?.dataset.competitionId)});
+  const box=$('competitionAttendance'); if(!box)return;
+  const a=window.__competitionAttendance||[]; const st=$('attendanceStatusFilter')?.value||'all';
+  const normalized=a.map(x=>({...x,attStatus:x.attendance?.status||'not_checked_in',att:x.attendance||{}}));
+  const rows=normalized.filter(x=>st==='all'||(st==='checked_in'&&x.attStatus==='checked_in')||(st==='late'&&x.attStatus==='late')||(st==='no_show'&&x.attStatus==='no_show')||(st==='cancelled'&&x.attStatus==='cancelled')||(st==='not_checked_in'&&x.attStatus==='not_checked_in'));
+  const counts={checked_in:0,late:0,no_show:0,cancelled:0,not_checked_in:0}; normalized.forEach(x=>counts[x.attStatus]=(counts[x.attStatus]||0)+1);
+  if($('competitionAttendanceSummary'))$('competitionAttendanceSummary').innerHTML='<div class="competitionSummaryItem"><b>'+a.length+'</b><span>已報名</span></div><div class="competitionSummaryItem"><b>'+counts.checked_in+'</b><span>已簽到</span></div><div class="competitionSummaryItem"><b>'+counts.late+'</b><span>遲到</span></div><div class="competitionSummaryItem"><b>'+counts.not_checked_in+'</b><span>未簽到</span></div><div class="competitionSummaryItem"><b>'+counts.no_show+'</b><span>未到</span></div>';
+  const statusText=x=>({checked_in:'🟢 已簽到',late:'🟡 遲到',no_show:'🔴 未到',cancelled:'⚪ 取消',not_checked_in:'⚪ 尚未簽到'}[x]||x);
+  box.innerHTML=rows.map(x=>{const p=x.profile||{};const member=x.member_no!=null?String(x.member_no).padStart(3,'0'):String(p.member_no??'—').padStart(3,'0');const name=x.nickname||p.nickname||x.email||'會員';const att=x.attendance;const checked=att&&['checked_in','late'].includes(att.status);return '<article class="notice"><div class="date">'+statusText(x.attStatus)+(att?.checked_in_at?' · '+esc(new Date(att.checked_in_at).toLocaleString('zh-TW')):'')+'</div><h3>會員 '+esc(member)+'｜'+esc(name)+'</h3><p>Email：'+esc(x.email||'—')+' · 簽到積分：'+esc(att?.points_awarded||0)+'</p><div class="competitionActions">'+(!checked?'<button class="btn secondary" data-att-member="'+esc(x.user_id)+'" data-att-status="checked_in">✅ 補簽到</button>':'' )+'<button class="btn secondary" data-att-member="'+esc(x.user_id)+'" data-att-status="late">🟡 遲到</button><button class="btn secondary" data-att-member="'+esc(x.user_id)+'" data-att-status="no_show">🔴 未到</button></div></article>'}).join('')||'<div class="empty">目前沒有符合條件的報名會員。</div>';
+  box.querySelectorAll('[data-att-member]').forEach(b=>b.onclick=async()=>{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_mark_competition_member_attendance',{method:'POST',headers:{...auth(),Prefer:'return=representation'},body:JSON.stringify({p_competition_id:$('competitionAttendancePanel').dataset.competitionId,p_user_id:b.dataset.attMember,p_status:b.dataset.attStatus,p_note:null})});
+    const d=await r.json().catch(()=>({})); if(!r.ok){msg('competitionMsg','❌ 更新簽到失敗：'+(d.message||d.hint||('HTTP '+r.status)));return} msg('competitionMsg','✅ 簽到狀態已更新。'); await loadCompetitionAttendance($('competitionAttendancePanel').dataset.competitionId);
+  });
 }
+
 async function competitions(){
   await competitionCategories();
   if(!$('adminCompetitions')||!configured()||!localStorage.getItem('access_token'))return;
